@@ -1,6 +1,5 @@
-use std::fs::File;
-use std::io::{prelude::*, BufRead, BufReader};
-use std::path::Path;
+use std::fs::{File, OpenOptions};
+use std::io::{BufRead, BufReader, Write};
 
 const DEFAULT_CONFIG_PROFILE: &str = "/etc/default/amdgpu-settings.config0";
 
@@ -22,7 +21,7 @@ fn parse_od_sclk(config: &mut DeviceConfig, lines: &[String]) {
     while lines[i].len() != 0 {
         let sclk: (char, u32) = (
             lines[i].chars().nth(0).expect("Invalid OD_SCLK option"),
-            (&lines[i][3..].split("m").collect::<Vec<&str>>()[0])
+            (&lines[i][3..].split("M").collect::<Vec<&str>>()[0])
                 .parse().expect("Invalid OD_SCLK option")
         );
         match sclk.0 {
@@ -54,7 +53,7 @@ fn parse_power_cap(config: &mut DeviceConfig, lines: &[String]) {
 
 }
 
-fn parse_configs(path: &str) -> Option<DeviceConfig> {
+fn parse_configs(path: &str) -> DeviceConfig {
     let file = File::open(path).expect("No config file");
     let lines: Vec<String> = BufReader::new(file)
         .lines()
@@ -79,18 +78,45 @@ fn parse_configs(path: &str) -> Option<DeviceConfig> {
         }
         i += 1;
     }
-    println!("{:#?}", config);
-    return Some(config);
+    // println!("{:#?}", config);
+    return config;
 }
 
-fn apply_settings(config: DeviceConfig) {
-
+fn apply_settings(config: &DeviceConfig) {
+    let home_path = format!("/sys/class/drm/card{}/device", config.card);
+    println!("---------- Committing Settings ----------");
+    println!("{:#?}", config);
+    if config.power_cap.is_some() {
+        let mut file = OpenOptions::new().write(true)
+            .open(format!("{}/hwmon/hwmon1/power1_cap", home_path))
+            .expect("Can't access power1_cap file");
+        write!(&mut file, "{}", config.power_cap.unwrap())
+            .expect("Failed to set POWER_CAP");
+    }
+    let mut file = OpenOptions::new().write(true)
+        .open(format!("{}/pp_od_clk_voltage", home_path))
+        .expect("Can't access pp_od_clk_voltage file");
+    if config.od_sclk_min.is_some() {
+        write!(&mut file, "{}", format!("s 0 {}", config.od_sclk_min.unwrap()))
+            .expect("Failed to set od_sclk_min");
+    }
+    if config.od_sclk_max.is_some() {
+        write!(&mut file, "{}", format!("s 1 {}", config.od_sclk_max.unwrap()))
+            .expect("Failed to set od_sclk_max");
+    }
+    if config.od_vddgfx_offset.is_some() {
+        write!(&mut file, "{}", format!("vo {}", config.od_vddgfx_offset.unwrap()))
+            .expect("Failed to set od_vddgfx_offset");
+    }
+    write!(&mut file, "c")
+        .expect("Failed to final commit pp_od_clk_voltage_file");
+    println!("-----------------------------------------");
+    println!("Success!");
 }
 
 fn main() {
     // TODO: Read command line arg to get custom card profile
     // TEMP: Use the DEFAULT_CONFIG_PROFILE
-    let config = parse_configs(DEFAULT_CONFIG_PROFILE)
-        .expect("Error parsing config file!");
-    apply_settings(config);
+    let config = parse_configs(DEFAULT_CONFIG_PROFILE);
+    apply_settings(&config);
 }
