@@ -1,10 +1,11 @@
 use std::fs::{File, OpenOptions};
 use std::io::{BufRead, BufReader, Write};
+use clap::{Parser, Subcommand};
 
-const DEFAULT_CONFIG_PROFILE: &str = "/etc/default/amdgpu-settings.config0";
+const CONFIG_PROFILE_PATH: &str = "/etc/default/amdgpu-settings.";
+const DEFAULT_CARD_NUM: u8 = 1;
 
-#[derive(Default)]
-#[derive(Debug)]
+#[derive(Default, Debug)]
 struct DeviceConfig {
     card: u32,
     od_sclk_min: Option<u32>,
@@ -53,8 +54,8 @@ fn parse_power_cap(config: &mut DeviceConfig, lines: &[String]) {
 
 }
 
-fn parse_configs(path: &str) -> DeviceConfig {
-    let file = File::open(path).expect("No config file");
+fn parse_profile(path: &str) -> DeviceConfig {
+    let file = File::open(path).expect("Profile not found");
     let lines: Vec<String> = BufReader::new(file)
         .lines()
         .map(|l| l.expect("Can't parse line"))
@@ -84,7 +85,7 @@ fn parse_configs(path: &str) -> DeviceConfig {
 
 fn apply_settings(config: &DeviceConfig) {
     let home_path = format!("/sys/class/drm/card{}/device", config.card);
-    println!("---------- Committing Settings ----------");
+    println!("---------- Profile Settings ----------");
     println!("{:#?}", config);
     if config.power_cap.is_some() {
         let mut file = OpenOptions::new().write(true)
@@ -110,13 +111,84 @@ fn apply_settings(config: &DeviceConfig) {
     }
     write!(&mut file, "c")
         .expect("Failed to final commit pp_od_clk_voltage_file");
-    println!("-----------------------------------------");
+    // println!("--------------------------------------");
     println!("Success!");
 }
 
+fn reset_settings(card_num: u8) {
+    let home_path = format!("/sys/class/drm/card{}/device", card_num);
+    let mut file = OpenOptions::new().write(true)
+        .open(format!("{}/pp_od_clk_voltage", home_path))
+        .expect("Can't access pp_od_clk_voltage file");
+    println!("Resetting card{}...", card_num);
+    write!(&mut file, "r")
+        .expect("Failed to reset card with pp_od_clk_voltage_file");
+    println!("Success!");
+}
+
+fn list_settings(card_num: u8) {
+    println!("---------- Card {} Settings ----------", card_num);
+    let home_path = format!("/sys/class/drm/card{}/device", card_num);
+    let file = File::open(format!("{}/hwmon/hwmon1/power1_cap", home_path))
+        .expect("Can't access power1_cap file");
+    for line in BufReader::new(file).lines().map_while(Result::ok) {
+        println!("POWER_CAP: {} ({} W)", line, line.parse::<f32>().unwrap() / 1e6);
+    }
+    let file = File::open(format!("{}/pp_od_clk_voltage", home_path))
+        .expect("Can't access pp_od_clk_voltage file");
+    for line in BufReader::new(file).lines().map_while(Result::ok) {
+        println!("{}", line);
+    }
+}
+
+#[derive(Parser, Debug)]
+#[command(version, about, long_about = None)]
+#[command(propagate_version = true)]
+struct CliArgs {
+    #[command(subcommand)]
+    command: Option<Commands>,
+}
+
+#[derive(Subcommand, Debug)]
+enum Commands {
+    /// List current device config
+    List {
+        /// Device card number
+        #[arg(default_value_t=1)]
+        card: u8,
+    },
+    /// Set a device config profile
+    Set {
+        /// Device config profile
+        #[arg(default_value_t=String::from("default"))]
+        profile: String,
+    },
+    /// Reset device config profile
+    Reset {
+        /// Device card number
+        #[arg(default_value_t=1)]
+        card: u8,
+    },
+}
+
 fn main() {
-    // TODO: Read command line arg to get custom card profile
-    // TEMP: Use the DEFAULT_CONFIG_PROFILE
-    let config = parse_configs(DEFAULT_CONFIG_PROFILE);
-    apply_settings(&config);
+    let args  = CliArgs::parse();
+    // println!("{:#?}", args);
+
+    match args.command {
+        Some(Commands::Set{profile}) => {
+            let config_profile = CONFIG_PROFILE_PATH.to_owned() + &profile;
+            let config = parse_profile(&config_profile);
+            apply_settings(&config);
+        },
+        Some(Commands::Reset{card}) => {
+            reset_settings(card);
+        },
+        Some(Commands::List{card}) => {
+            list_settings(card);
+        },
+        None => {
+            list_settings(DEFAULT_CARD_NUM);
+        }
+    };
 }
