@@ -83,9 +83,9 @@ fn parse_profile(path: &str) -> DeviceConfig {
     return config;
 }
 
-fn apply_settings(config: &DeviceConfig) {
+fn apply_settings(name: &str, config: &DeviceConfig) {
     let home_path = format!("/sys/class/drm/card{}/device", config.card);
-    println!("---------- Profile Settings ----------");
+    println!("---------- {} Settings ----------", name.to_uppercase());
     println!("{:#?}", config);
     if config.power_cap.is_some() {
         let mut file = OpenOptions::new().write(true)
@@ -179,7 +179,7 @@ fn main() {
         Some(Commands::Set{profile}) => {
             let config_profile = CONFIG_PROFILE_PATH.to_owned() + &profile;
             let config = parse_profile(&config_profile);
-            apply_settings(&config);
+            apply_settings(&profile, &config);
         },
         Some(Commands::Reset{card}) => {
             reset_settings(card);
