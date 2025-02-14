@@ -3,7 +3,6 @@ use std::io::{BufRead, BufReader, Write};
 use clap::{Parser, Subcommand};
 
 const CONFIG_PROFILE_PATH: &str = "/etc/default/amdgpu-settings.";
-const DEFAULT_CARD_NUM: u8 = 1;
 
 #[derive(Default, Debug)]
 struct DeviceConfig {
@@ -37,8 +36,25 @@ fn parse_od_sclk(config: &mut DeviceConfig, lines: &[String]) {
     }
 }
 
-fn parse_od_mclk(_config: &mut DeviceConfig, _lines: &[String]) {
-    println!("Skipping: custom OD_MCLK not implemented");
+fn parse_od_mclk(config: &mut DeviceConfig, lines: &[String]) {
+    let mut i: usize = 1;
+
+    while lines[i].len() != 0 {
+        let mclk: (char, u32) = (
+            lines[i].chars().nth(0).expect("Invalid OD_MCLK option"),
+            (&lines[i][3..].split("M").collect::<Vec<&str>>()[0])
+                .parse().expect("Invalid OD_MCLK option")
+        );
+        match mclk.0 {
+            '0' => config.od_mclk_min = Some(mclk.1),
+            '1' => config.od_mclk_max = Some(mclk.1),
+            _ => {
+                println!("Invalid OD_MCLK option");
+                return;
+            },
+        }
+        i += 1;
+    }
 }
 
 fn parse_od_vddgfx_offset(config: &mut DeviceConfig, lines: &[String]) {
@@ -124,7 +140,15 @@ fn apply_settings(name: &str, config: &DeviceConfig) {
     println!("Success!");
 }
 
-fn reset_settings(card_num: u8) {
+fn reset_settings(path: &str) {
+    let file = File::open(path).expect("Profile not found");
+    let lines: Vec<String> = BufReader::new(file)
+        .lines()
+        .map(|l| l.expect("Can't parse line"))
+        .collect();
+    let card: &str = &lines[0];
+    let card_num: u8 = (&card[6..]).parse().expect("Invalid card mount point: Check /sys/class/drm/card#");
+
     let home_path = format!("/sys/class/drm/card{}/device", card_num);
     let mut file = OpenOptions::new().write(true)
         .open(format!("{}/pp_od_clk_voltage", home_path))
@@ -135,7 +159,15 @@ fn reset_settings(card_num: u8) {
     println!("Success!");
 }
 
-fn read_card_settings(card_num: u8) {
+fn read_card_settings(path: &str) {
+    let file = File::open(path).expect("Profile not found");
+    let lines: Vec<String> = BufReader::new(file)
+        .lines()
+        .map(|l| l.expect("Can't parse line"))
+        .collect();
+    let card: &str = &lines[0];
+    let card_num: u8 = (&card[6..]).parse().expect("Invalid card mount point: Check /sys/class/drm/card#");
+
     println!("---------- Card {} Settings ----------", card_num);
     let home_path = format!("/sys/class/drm/card{}/device", card_num);
     let file = File::open(format!("{}/hwmon/hwmon1/power1_cap", home_path))
@@ -162,9 +194,9 @@ struct CliArgs {
 enum Commands {
     /// List current device config
     Info {
-        /// Device card number
-        #[arg(default_value_t=1)]
-        card: u8,
+        /// Device profile (card num in the profile) to read GPU info from
+        #[arg(default_value_t=String::from("default"))]
+        profile: String,
     },
     /// Set a device config profile
     Set {
@@ -174,9 +206,9 @@ enum Commands {
     },
     /// Reset device config profile
     Reset {
-        /// Device card number
-        #[arg(default_value_t=1)]
-        card: u8,
+        /// Device profile (card num in the profile) to read GPU info from
+        #[arg(default_value_t=String::from("default"))]
+        profile: String,
     },
 }
 
@@ -189,14 +221,17 @@ fn main() {
             let config = parse_profile(&config_profile);
             apply_settings(&profile, &config);
         },
-        Some(Commands::Reset{card}) => {
-            reset_settings(card);
+        Some(Commands::Reset{profile}) => {
+            let config_profile = CONFIG_PROFILE_PATH.to_owned() + &profile;
+            reset_settings(&config_profile);
         },
-        Some(Commands::Info{card}) => {
-            read_card_settings(card);
+        Some(Commands::Info{profile}) => {
+            let config_profile = CONFIG_PROFILE_PATH.to_owned() + &profile;
+            read_card_settings(&config_profile);
         },
         None => {
-            read_card_settings(DEFAULT_CARD_NUM);
+            let config_profile = CONFIG_PROFILE_PATH.to_owned() + "default";
+            read_card_settings(&config_profile);
         }
     };
 }

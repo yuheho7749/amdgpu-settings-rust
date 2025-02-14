@@ -18,15 +18,15 @@ Note: This is only developed and tested on Linux 6.12+ using RDNA 3 GPU.
 ## Installation
 1. Run `cargo build --release`.
 2. Run the `install.sh` script to install file.
-3. `cp` the `amdgpu-settings.example` profile to `/etc/default/amdgpu-settings.[PROFILE-NAME]`.
+3. `cp` the `amdgpu-settings.example` profile to `/etc/default/amdgpu-settings.[PROFILE-NAME]`. It is HIGHLY recommended to have `/etc/default/amdgpu-settings.default` as it will be the profile used by default.
 
 ### Optional `Systemd` Installation
-- For auto-start, enable the service with `systemctl enable amdgpu-settings`
+- For auto-start, enable the service with `systemctl enable amdgpu-settings`. NOTE: `/etc/default/amdgpu-settings.default` must exist as the service will use that profile by default. To change it, edit the `amdgpu-settings.service` file and rerun the `install.sh` script.
 
 ## Usage
-- `amdgpu-settings set [PROFILE-NAME]` to apply profile settings (require elevated priviledges).
-- `amdgpu-settings reset [CARD-NUM]` to reset device/card settings (require elevated priviledges).
-- `amdgpu-settings info [CARD-NUM]` to read device/card settings.
+- `amdgpu-settings set [PROFILE-NAME='default']` to apply profile settings (require elevated priviledges).
+- `amdgpu-settings reset [PROFILE-NAME='default']` to reset card# specified by the profile (require elevated priviledges).
+- `amdgpu-settings info [PROFILE-NAME='default']` to read card# settings specified by the profile.
 - `amdgpu-settings --help`
 
 ## GPU Profile Format
