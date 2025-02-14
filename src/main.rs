@@ -192,21 +192,21 @@ struct CliArgs {
 
 #[derive(Subcommand, Debug)]
 enum Commands {
-    /// List current device config
+    /// List device settings
     Info {
         /// Device profile (card num in the profile) to read GPU info from
         #[arg(default_value_t=String::from("default"))]
         profile: String,
     },
-    /// Set a device config profile
+    /// Set a device profile
     Set {
-        /// Device config profile
+        /// Device profile
         #[arg(default_value_t=String::from("default"))]
         profile: String,
     },
-    /// Reset device config profile
+    /// Reset a device
     Reset {
-        /// Device profile (card num in the profile) to read GPU info from
+        /// Device profile (card num in the profile) to reset
         #[arg(default_value_t=String::from("default"))]
         profile: String,
     },
