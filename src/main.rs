@@ -64,8 +64,6 @@ fn parse_profile(path: &str) -> DeviceConfig {
     let card: (&str, u32) = (&card[..4], (&card[6..])
         .parse().expect("Invalid card mount point: Check /sys/class/drm/card#"));
 
-    // println!("{:#?}", lines);
-
     let mut config = DeviceConfig{card: card.1, ..Default::default()};
     let mut i: usize = 0;
     while i < lines.len() {
@@ -79,7 +77,6 @@ fn parse_profile(path: &str) -> DeviceConfig {
         }
         i += 1;
     }
-    // println!("{:#?}", config);
     return config;
 }
 
@@ -87,6 +84,7 @@ fn apply_settings(name: &str, config: &DeviceConfig) {
     let home_path = format!("/sys/class/drm/card{}/device", config.card);
     println!("---------- {} Settings ----------", name.to_uppercase());
     println!("{:#?}", config);
+    // POWER_CAP
     if config.power_cap.is_some() {
         let mut file = OpenOptions::new().write(true)
             .open(format!("{}/hwmon/hwmon1/power1_cap", home_path))
@@ -97,6 +95,7 @@ fn apply_settings(name: &str, config: &DeviceConfig) {
     let mut file = OpenOptions::new().write(true)
         .open(format!("{}/pp_od_clk_voltage", home_path))
         .expect("Can't access pp_od_clk_voltage file");
+    // OD_SCLK
     if config.od_sclk_min.is_some() {
         write!(&mut file, "{}", format!("s 0 {}", config.od_sclk_min.unwrap()))
             .expect("Failed to set od_sclk_min");
@@ -105,13 +104,23 @@ fn apply_settings(name: &str, config: &DeviceConfig) {
         write!(&mut file, "{}", format!("s 1 {}", config.od_sclk_max.unwrap()))
             .expect("Failed to set od_sclk_max");
     }
+    // OD_MCLK
+    if config.od_mclk_min.is_some() {
+        write!(&mut file, "{}", format!("m 0 {}", config.od_mclk_min.unwrap()))
+            .expect("Failed to set od_mclk_min");
+    }
+    if config.od_mclk_max.is_some() {
+        write!(&mut file, "{}", format!("m 1 {}", config.od_mclk_max.unwrap()))
+            .expect("Failed to set od_mclk_max");
+    }
+    // OD_VDDGFX_OFFSET
     if config.od_vddgfx_offset.is_some() {
         write!(&mut file, "{}", format!("vo {}", config.od_vddgfx_offset.unwrap()))
             .expect("Failed to set od_vddgfx_offset");
     }
+    // Commit to pp_od_clk_voltage
     write!(&mut file, "c")
         .expect("Failed to final commit pp_od_clk_voltage_file");
-    // println!("--------------------------------------");
     println!("Success!");
 }
 
@@ -126,7 +135,7 @@ fn reset_settings(card_num: u8) {
     println!("Success!");
 }
 
-fn list_settings(card_num: u8) {
+fn read_card_settings(card_num: u8) {
     println!("---------- Card {} Settings ----------", card_num);
     let home_path = format!("/sys/class/drm/card{}/device", card_num);
     let file = File::open(format!("{}/hwmon/hwmon1/power1_cap", home_path))
@@ -152,7 +161,7 @@ struct CliArgs {
 #[derive(Subcommand, Debug)]
 enum Commands {
     /// List current device config
-    List {
+    Info {
         /// Device card number
         #[arg(default_value_t=1)]
         card: u8,
@@ -173,7 +182,6 @@ enum Commands {
 
 fn main() {
     let args  = CliArgs::parse();
-    // println!("{:#?}", args);
 
     match args.command {
         Some(Commands::Set{profile}) => {
@@ -184,11 +192,11 @@ fn main() {
         Some(Commands::Reset{card}) => {
             reset_settings(card);
         },
-        Some(Commands::List{card}) => {
-            list_settings(card);
+        Some(Commands::Info{card}) => {
+            read_card_settings(card);
         },
         None => {
-            list_settings(DEFAULT_CARD_NUM);
+            read_card_settings(DEFAULT_CARD_NUM);
         }
     };
 }
