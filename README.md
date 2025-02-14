@@ -1,6 +1,6 @@
 # AMDGPU Settings (Rust)
 
-Cli tool to monitor and set AMDGPU settings.
+CLI tool to monitor and tune AMDGPU settings.
 
 Improved version of [amdgpu-settings](https://github.com/yuheho7749/amdgpu-settings) rewritten in Rust.
 
