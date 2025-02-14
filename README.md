@@ -33,8 +33,8 @@ Note: This is only developed and tested on Linux 6.12+ using RDNA 3 GPU.
 The profile **MUST** have `CARD: #` as the first line. That will be used to find where the GPU is mounted in the file system. To check which card number your GPU is mounted at, navigate to `/sys/class/drm/`. The GPU will most likely be mounted as `card0` or `card1`, although it may vary from system to system.
 
 The currently supported options are:
-- `OD_SCLK` (the '0' means min frequency and '1' means max frequency)
-- `OD_MCLK` (the '0' means min frequency and '1' means max frequency)
+- `OD_SCLK` (the '0: [value]Mhz' means min frequency and '1: [value]Mhz' means max frequency)
+- `OD_MCLK` (the '0: [value]Mhz' means min frequency and '1: [value]Mhz' means max frequency)
 - `OD_VDDGFX_OFFSET`
 - `POWER_CAP`
 
