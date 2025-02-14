@@ -24,9 +24,9 @@ Note: This is only developed and tested on Linux 6.12+ using RDNA 3 GPU.
 - For auto-start, enable the service with `systemctl enable amdgpu-settings`. NOTE: `/etc/default/amdgpu-settings.default` must exist as the service will use that profile by default. To change it, edit the `amdgpu-settings.service` file and rerun the `install.sh` script.
 
 ## Usage
-- `amdgpu-settings set [PROFILE-NAME='default']` to apply profile settings (require elevated priviledges).
-- `amdgpu-settings reset [PROFILE-NAME='default']` to reset card# specified by the profile (require elevated priviledges).
-- `amdgpu-settings info [PROFILE-NAME='default']` to read card# settings specified by the profile.
+- `amdgpu-settings set [PROFILE-NAME]` to apply profile settings (require elevated priviledges).
+- `amdgpu-settings reset [PROFILE-NAME]` to reset card# specified by the profile (require elevated priviledges).
+- `amdgpu-settings info [PROFILE-NAME]` to read card# settings specified by the profile.
 - `amdgpu-settings --help`
 
 ## GPU Profile Format
