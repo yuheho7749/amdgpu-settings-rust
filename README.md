@@ -8,10 +8,10 @@ Improved version of [amdgpu-settings](https://github.com/yuheho7749/amdgpu-setti
 - `Systemd` service to automatically apply profile on startup.
 - Support multiple GPU profiles.
 
-Note: This is only developed and tested on Linux 6.12+ using RDNA 3 GPU.
+Note: This is only developed and tested using a RDNA 3 GPU.
 
 ## Prerequisites
-- Linux kernel 6.10 or up (lts 6.6 will not work).
+- Linux kernel 6.13 or newer
 - Kernel parameters must be set according to [this](https://wiki.archlinux.org/title/AMDGPU#Boot_parameter).
 - Cargo/rustc.
 

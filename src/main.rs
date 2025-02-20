@@ -13,6 +13,9 @@ struct DeviceConfig {
     od_mclk_max: Option<u32>,
     od_vddgfx_offset: Option<i32>,
     power_cap: Option<u64>,
+    fan_target_temp: Option<u32>,
+    fan_zero_rpm: Option<u8>,
+    fan_zero_rpm_stop_temp: Option<u32>,
 }
 
 fn parse_od_sclk(config: &mut DeviceConfig, lines: &[String]) {
@@ -58,16 +61,30 @@ fn parse_od_mclk(config: &mut DeviceConfig, lines: &[String]) {
 }
 
 fn parse_od_vddgfx_offset(config: &mut DeviceConfig, lines: &[String]) {
-    let value: i32 = lines[1].split("m")
+    let value = lines[1].split("m")
         .collect::<Vec<&str>>()[0]
         .parse().expect("Invalid voltage");
     config.od_vddgfx_offset = Some(value);
 }
 
 fn parse_power_cap(config: &mut DeviceConfig, lines: &[String]) {
-    let value: u64 = lines[1].parse().expect("Invalid POWER_CAP");
+    let value = lines[1].parse().expect("Invalid POWER_CAP");
     config.power_cap = Some(value);
+}
 
+fn parse_fan_target_temp(config: &mut DeviceConfig, lines: &[String]) {
+    let value = lines[1].parse().expect("Invalid FAN_TARGET_TEMPERATURE");
+    config.fan_target_temp = Some(value);
+}
+
+fn parse_fan_zero_rpm(config: &mut DeviceConfig, lines: &[String]) {
+    let value = lines[1].parse().expect("Invalid FAN_ZERO_RPM_ENABLE");
+    config.fan_zero_rpm = Some(value);
+}
+
+fn parse_fan_zero_rpm_stop_temp(config: &mut DeviceConfig, lines: &[String]) {
+    let value = lines[1].parse().expect("Invalid FAN_ZERO_RPM_STOP_TEMPERATURE");
+    config.fan_zero_rpm_stop_temp = Some(value);
 }
 
 fn parse_profile(path: &str) -> DeviceConfig {
@@ -89,6 +106,9 @@ fn parse_profile(path: &str) -> DeviceConfig {
             "OD_MCLK:" => parse_od_mclk(&mut config, &lines[i..]),
             "OD_VDDGFX_OFFSET:" => parse_od_vddgfx_offset(&mut config, &lines[i..]),
             "POWER_CAP:" => parse_power_cap(&mut config, &lines[i..]),
+            "FAN_TARGET_TEMPERATURE:" => parse_fan_target_temp(&mut config, &lines[i..]),
+            "FAN_ZERO_RPM_ENABLE:" => parse_fan_zero_rpm(&mut config, &lines[i..]),
+            "FAN_ZERO_RPM_STOP_TEMPERATURE:" => parse_fan_zero_rpm_stop_temp(&mut config, &lines[i..]),
             _ => {}
         }
         i += 1;
@@ -108,6 +128,7 @@ fn apply_settings(name: &str, config: &DeviceConfig) {
         write!(&mut file, "{}", config.power_cap.unwrap())
             .expect("Failed to set POWER_CAP");
     }
+    // TODO: Apply fan control settings
     let mut file = OpenOptions::new().write(true)
         .open(format!("{}/pp_od_clk_voltage", home_path))
         .expect("Can't access pp_od_clk_voltage file");
@@ -156,6 +177,7 @@ fn reset_settings(path: &str) {
     println!("Resetting card{}...", card_num);
     write!(&mut file, "r")
         .expect("Failed to reset card with pp_od_clk_voltage_file");
+    // TODO: Reset fan control settings
     println!("Success!");
 }
 
@@ -169,16 +191,37 @@ fn read_card_settings(path: &str) {
     let card_num: u8 = (&card[6..]).parse().expect("Invalid card mount point: Check /sys/class/drm/card#");
 
     println!("---------- Card {} Settings ----------", card_num);
+    // POWER_CAP
     let home_path = format!("/sys/class/drm/card{}/device", card_num);
     let file = File::open(format!("{}/hwmon/hwmon1/power1_cap", home_path))
         .expect("Can't access power1_cap file");
     for line in BufReader::new(file).lines().map_while(Result::ok) {
         println!("POWER_CAP: {} ({} W)", line, line.parse::<f32>().unwrap() / 1e6);
     }
+    // PP_OD_CLK_VOLTAGE
     let file = File::open(format!("{}/pp_od_clk_voltage", home_path))
         .expect("Can't access pp_od_clk_voltage file");
     for line in BufReader::new(file).lines().map_while(Result::ok) {
         println!("{}", line);
+    }
+    // FAN SETTINGS
+    let fan_dir = format!("{}/gpu_od/fan_ctrl", home_path);
+    let fan_target_temp_file = File::open(format!("{}/fan_target_temperature", fan_dir))
+        .expect("Can't access fan_target_temperature file");
+    for line in BufReader::new(fan_target_temp_file).lines().map_while(Result::ok) {
+        println!("{}", line);
+    }
+    let fan_zero_rpm_file_result = File::open(format!("{}/fan_zero_rpm_enable", fan_dir));
+    if let Ok(fan_zero_rpm_file) = fan_zero_rpm_file_result {
+        for line in BufReader::new(fan_zero_rpm_file).lines().map_while(Result::ok) {
+            println!("{}", line);
+        }
+    }
+    let fan_zero_rpm_stop_temp_file_result = File::open(format!("{}/fan_zero_rpm_stop_temperature", fan_dir));
+    if let Ok(fan_zero_rpm_stop_temp_file) = fan_zero_rpm_stop_temp_file_result {
+        for line in BufReader::new(fan_zero_rpm_stop_temp_file).lines().map_while(Result::ok) {
+            println!("{}", line);
+        }
     }
 }
 
