@@ -258,16 +258,16 @@ fn read_card_settings(path: &str) {
     for line in BufReader::new(fan_target_temp_file).lines().map_while(Result::ok) {
         println!("{}", line);
     }
-    println!();
     let fan_zero_rpm_file_result = File::open(format!("{}/fan_zero_rpm_enable", fan_dir));
     if let Ok(fan_zero_rpm_file) = fan_zero_rpm_file_result {
+        println!();
         for line in BufReader::new(fan_zero_rpm_file).lines().map_while(Result::ok) {
             println!("{}", line);
         }
     }
-    println!();
     let fan_zero_rpm_stop_temp_file_result = File::open(format!("{}/fan_zero_rpm_stop_temperature", fan_dir));
     if let Ok(fan_zero_rpm_stop_temp_file) = fan_zero_rpm_stop_temp_file_result {
+        println!();
         for line in BufReader::new(fan_zero_rpm_stop_temp_file).lines().map_while(Result::ok) {
             println!("{}", line);
         }
