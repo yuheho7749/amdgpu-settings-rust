@@ -11,7 +11,7 @@ Improved version of [amdgpu-settings](https://github.com/yuheho7749/amdgpu-setti
 Note: This is only developed and tested using a RDNA 3 GPU.
 
 ## Prerequisites
-- Linux kernel 6.13 or newer
+- Linux kernel 6.13 or newer (required for `FAN_ZERO_RPM_ENABLE` and `FAN_ZERO_RPM_STOP_TEMPERATURE` settings) OR Linux kernel 6.10 or newer (Linux 6.6 lts will NOT work)
 - Kernel parameters must be set according to [this](https://wiki.archlinux.org/title/AMDGPU#Boot_parameter).
 - Cargo/rustc.
 
@@ -37,6 +37,9 @@ The currently supported options are:
 - `OD_MCLK` (the '0: [value]Mhz' means min frequency and '1: [value]Mhz' means max frequency)
 - `OD_VDDGFX_OFFSET`
 - `POWER_CAP`
+- `FAN_TARGET_TEMPERATURE`
+- `FAN_ZERO_RPM_ENABLE`
+- `FAN_ZERO_RPM_STOP_TEMPERATURE`
 
 An example of a GPU profile is shown below:
 ```
@@ -50,4 +53,13 @@ OD_VDDGFX_OFFSET:
 
 POWER_CAP:
 240000000
+
+FAN_TARGET_TEMPERATURE:
+80
+
+FAN_ZERO_RPM_ENABLE:
+1
+
+FAN_ZERO_RPM_STOP_TEMPERATURE:
+50
 ```
