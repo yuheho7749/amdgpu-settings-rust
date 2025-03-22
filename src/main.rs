@@ -140,19 +140,25 @@ fn apply_settings(name: &str, config: &DeviceConfig) {
     }
     // FAN_ZERO_RPM_ENABLE
     if config.fan_zero_rpm.is_some() {
-        let mut file = OpenOptions::new().write(true)
-            .open(format!("{}/gpu_od/fan_ctrl/fan_zero_rpm_enable", home_path))
-            .expect("Can't access fan_zero_rpm_enable file. (Only supported in Linux 6.13 or newer)");
-        write!(&mut file, "{}", format!("{}\n", config.fan_zero_rpm.unwrap()))
-            .expect("Failed to write FAN_ZERO_RPM_ENABLE");
+        let file_result = OpenOptions::new().write(true)
+            .open(format!("{}/gpu_od/fan_ctrl/fan_zero_rpm_enable", home_path));
+        if let Ok(mut file) = file_result {
+            write!(&mut file, "{}", format!("{}\n", config.fan_zero_rpm.unwrap()))
+                .expect("Failed to write FAN_ZERO_RPM_ENABLE");
+        } else {
+            println!("Skip setting FAN_ZERO_RPM_ENABLE. Make sure to have Linux 6.13 or newer.");
+        }
     }
     // FAN_ZERO_RPM_STOP_TEMPERATURE
     if config.fan_zero_rpm_stop_temp.is_some() {
-        let mut file = OpenOptions::new().write(true)
-            .open(format!("{}/gpu_od/fan_ctrl/fan_zero_rpm_stop_temperature", home_path))
-            .expect("Can't access fan_zero_rpm_stop_temperature file. (Only supported in Linux 6.13 or newer");
-        write!(&mut file, "{}", format!("{}\n", config.fan_zero_rpm_stop_temp.unwrap()))
-            .expect("Failed to write FAN_ZERO_RPM_STOP_TEMPERATURE");
+        let file_result = OpenOptions::new().write(true)
+            .open(format!("{}/gpu_od/fan_ctrl/fan_zero_rpm_stop_temperature", home_path));
+        if let Ok(mut file) = file_result {
+            write!(&mut file, "{}", format!("{}\n", config.fan_zero_rpm_stop_temp.unwrap()))
+                .expect("Failed to write FAN_ZERO_RPM_STOP_TEMPERATURE");
+        } else {
+            println!("Skip setting FAN_ZERO_RPM_STOP_TEMPERATURE. Make sure to have Linux 6.13 or newer.");
+        }
     }
 
     // pp_od_clk_voltage
