@@ -9,16 +9,20 @@ Improved version of [amdgpu-settings](https://github.com/yuheho7749/amdgpu-setti
 - `Systemd` service to automatically apply profile on startup.
 - Support multiple GPU profiles.
 
-*Note: This is only developed and tested using a RDNA 3 GPU.*
+> [!NOTE]
+> This is only developed and tested using a RDNA 3 GPU.
 
 ## Prerequisites
 - Linux kernel 6.13 or newer (required for `FAN_ZERO_RPM_ENABLE` and `FAN_ZERO_RPM_STOP_TEMPERATURE` settings) OR Linux kernel 6.10 or newer.
 - Kernel parameters must be set according to [this](https://wiki.archlinux.org/title/AMDGPU#Boot_parameter).
-- Cargo/rustc.
+- Cargo
 
 ## Installation
-2. Run the `install.sh` script to build and install files.
-3. `cp` the `amdgpu-settings.example` profile to `/etc/default/amdgpu-settings.[PROFILE_NAME]`. It is HIGHLY recommended to have `/etc/default/amdgpu-settings.default` as it will be the profile used by default. *Tip: Use a symlink `/etc/default/amdgpu-settings.default` to point to another profile.*
+1. Run the `install.sh` script to build and install files.
+2. `cp` the `amdgpu-settings.example` profile to `/etc/default/amdgpu-settings.[PROFILE_NAME]`. It is HIGHLY recommended to have `/etc/default/amdgpu-settings.default` as it will be the profile used by default.
+
+> [!TIP]
+> Use a symlink `/etc/default/amdgpu-settings.default` to point to another profile.
 
 ### Optional `Systemd` Installation
 - For auto-start, enable the service with `systemctl enable amdgpu-settings`. NOTE: `/etc/default/amdgpu-settings.default` must exist as the service will use that profile by default. *Tip: You can use a symlink to avoid editing the `amdgpu-settings.service` file.*
