@@ -22,10 +22,13 @@ Improved version of [amdgpu-settings](https://github.com/yuheho7749/amdgpu-setti
 2. `cp` the `amdgpu-settings.example` profile to `/etc/default/amdgpu-settings.[PROFILE_NAME]`. It is HIGHLY recommended to have `/etc/default/amdgpu-settings.default` as it will be the profile used by default.
 
 > [!TIP]
-> Use a symlink to set the default profile set by systemd (`/etc/default/amdgpu-settings.default`)
+> Use a symlink to set the default profile `/etc/default/amdgpu-settings.default`
 
 ### Optional `Systemd` Installation
-- For auto-start, enable the service with `systemctl enable amdgpu-settings`. NOTE: `/etc/default/amdgpu-settings.default` must exist as the service will use that profile by default. *Tip: You can use a symlink to avoid editing the `amdgpu-settings.service` file.*
+- For auto-start, enable the service with `systemctl enable amdgpu-settings`.
+
+> [!IMPORTANT]
+> `/etc/default/amdgpu-settings.default` must exist as the service will use that profile by default. You should use a symlink to avoid editing the `amdgpu-settings.service` file.
 
 ## Usage
 - `amdgpu-settings set [PROFILE_NAME]` to reset and apply new profile settings (require elevated/sudo privileges).
