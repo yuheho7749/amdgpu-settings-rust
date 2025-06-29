@@ -25,7 +25,7 @@ Inspired by [amdgpu-clocks](https://github.com/sibradzic/amdgpu-clocks).
 > Use a symlink to set the default profile `/etc/default/amdgpu-settings.default`. Additionally, you define multiple profiles `/etc/default/amdgpu-settings.[PROFILE_NAME]` and quickly swap profiles with `sudo amdgpu-settings set [PROFILE_NAME]`
 
 ### Optional `Systemd` Installation
-- For auto-start, enable the service with `systemctl enable amdgpu-settings`.
+- For auto-start, enable the service with `systemctl enable amdgpu-settings`
 
 > [!IMPORTANT]
 > `/etc/default/amdgpu-settings.default` must exist as the service will use that profile by default. You should use a symlink to avoid editing the `amdgpu-settings.service` file.
