@@ -1,9 +1,11 @@
 #!/usr/bin/env bash
 
-cp ./target/release/amdgpu-settings /usr/local/bin/amdgpu-settings
-chmod +x /usr/local/bin/amdgpu-settings
+cargo build --release
 
-cp ./amdgpu-settings.resume /usr/lib/systemd/system-sleep/amdgpu-settings.resume
-chmod +x /usr/lib/systemd/system-sleep/amdgpu-settings.resume
+sudo cp ./target/release/amdgpu-settings /usr/local/bin/amdgpu-settings
+sudo chmod +x /usr/local/bin/amdgpu-settings
 
-cp ./amdgpu-settings.service /etc/systemd/system/amdgpu-settings.service
+sudo cp ./src/amdgpu-settings.resume /usr/lib/systemd/system-sleep/amdgpu-settings.resume
+sudo chmod +x /usr/lib/systemd/system-sleep/amdgpu-settings.resume
+
+sudo cp ./src/amdgpu-settings.service /etc/systemd/system/amdgpu-settings.service
