@@ -1,8 +1,8 @@
 # AMDGPU Settings (Rust)
 
-CLI tool to monitor and tune AMDGPU settings.
+CLI tool written in Rust to monitor and tune AMDGPU settings.
 
-Improved version of [amdgpu-settings](https://github.com/yuheho7749/amdgpu-settings) rewritten in Rust.
+Inspired by [amdgpu-clocks](https://github.com/sibradzic/amdgpu-clocks).
 
 ## Features
 - Supports RDNA 3. RDNA 2 or older might work, but is untested. RDNA 4 is unsupported at the moment.
