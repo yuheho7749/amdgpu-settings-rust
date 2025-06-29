@@ -7,6 +7,8 @@ const CONFIG_PROFILE_PATH: &str = "/etc/default/amdgpu-settings.";
 #[derive(Default, Debug)]
 struct DeviceConfig {
     card: u32,
+    performance_level: Option<String>,
+    power_profile_index: Option<u8>,
     od_sclk_min: Option<u32>,
     od_sclk_max: Option<u32>,
     od_mclk_min: Option<u32>,
@@ -16,6 +18,16 @@ struct DeviceConfig {
     fan_target_temp: Option<u32>,
     fan_zero_rpm: Option<u8>,
     fan_zero_rpm_stop_temp: Option<u32>,
+}
+
+fn parse_performance_level(config: &mut DeviceConfig, lines: &[String]) {
+    let value = lines[1].parse().expect("Invalid PERFORMANCE_LEVEL");
+    config.performance_level = Some(value);
+}
+
+fn parse_power_profile_index(config: &mut DeviceConfig, lines: &[String]) {
+    let value = lines[1].parse().expect("Invalid POWER_PROFILE_INDEX");
+    config.power_profile_index = Some(value);
 }
 
 fn parse_od_sclk(config: &mut DeviceConfig, lines: &[String]) {
@@ -102,6 +114,8 @@ fn parse_profile(path: &str) -> DeviceConfig {
     while i < lines.len() {
         let line: &str = &lines[i].trim();
         match line {
+            "PERFORMANCE_LEVEL:" => parse_performance_level(&mut config, &lines[i..]),
+            "POWER_PROFILE_INDEX:" => parse_power_profile_index(&mut config, &lines[i..]),
             "OD_SCLK:" => parse_od_sclk(&mut config, &lines[i..]),
             "OD_MCLK:" => parse_od_mclk(&mut config, &lines[i..]),
             "OD_VDDGFX_OFFSET:" => parse_od_vddgfx_offset(&mut config, &lines[i..]),
@@ -120,6 +134,19 @@ fn apply_settings(name: &str, config: &DeviceConfig) {
     let home_path = format!("/sys/class/drm/card{}/device", config.card);
     println!("---------- {} Settings ----------", name.to_uppercase());
     println!("{:#?}", config);
+
+    // PERFORMANCE_LEVEL
+    let mut file = OpenOptions::new().write(true)
+        .open(format!("{}/power_dpm_force_performance_level", home_path))
+        .expect("Can't access power_dpm_force_performance_level file");
+    if config.performance_level.is_some() {
+        write!(&mut file, "{}", config.performance_level.as_deref().unwrap_or("manual"))
+            .expect("Failed to write power_dpm_force_performance_level");
+    } else {
+        write!(&mut file, "manual")
+            .expect("Failed to write power_dpm_force_performance_level to \"manual\"");
+    }
+
     // POWER_CAP (Side effect of writing a new value will reset GPU settings. Should set this
     // before adjusting the other settings)
     if config.power_cap.is_some() {
@@ -128,6 +155,15 @@ fn apply_settings(name: &str, config: &DeviceConfig) {
             .expect("Can't access power1_cap file");
         write!(&mut file, "{}", config.power_cap.unwrap())
             .expect("Failed to set POWER_CAP");
+    }
+
+    // POWER_PROFILE_INDEX
+    if config.power_profile_index.is_some() {
+        let mut file = OpenOptions::new().write(true)
+            .open(format!("{}/pp_power_profile_mode", home_path))
+            .expect("Can't access pp_power_profile_mode file");
+        write!(&mut file, "{}", config.power_profile_index.unwrap())
+            .expect("Failed to set POWER_PROFILE_INDEX");
     }
 
     // FAN_TARGET_TEMPERATURE 
@@ -188,7 +224,7 @@ fn apply_settings(name: &str, config: &DeviceConfig) {
         write!(&mut file, "{}", format!("vo {}", config.od_vddgfx_offset.unwrap()))
             .expect("Failed to write od_vddgfx_offset");
     }
-    // NOTE: Commit to pp_od_clk_voltage (but it will actually just commit all "committable" settings)
+    // NOTE: Commit to pp_od_clk_voltage (but it will actually just commit all "committable" settings on RDNA 3)
     // By "committable", see https://docs.kernel.org/gpu/amdgpu/thermal.html for all settings that require an explicit "c" to commit
     write!(&mut file, "c")
         .expect("Failed to commit final settings");
@@ -204,7 +240,15 @@ fn reset_settings(path: &str) {
     let card: &str = &lines[0];
     let card_num: u8 = (&card[6..]).parse().expect("Invalid card mount point: Check /sys/class/drm/card#");
 
+    println!("Resetting card{}...", card_num);
     let home_path = format!("/sys/class/drm/card{}/device", card_num);
+
+    // Reset PERFORMANCE_LEVEL
+    let mut file = OpenOptions::new().write(true)
+        .open(format!("{}/power_dpm_force_performance_level", home_path))
+        .expect("Can't access power_dpm_force_performance_level file");
+    write!(&mut file, "auto")
+        .expect("Failed to reset power_dpm_force_performance_level to \"auto\"");
 
     // Reset POWER_CAP
     let file = File::open(format!("{}/hwmon/hwmon1/power1_cap_default", home_path))
@@ -219,16 +263,23 @@ fn reset_settings(path: &str) {
     write!(&mut file, "{}", power_cap_default)
         .expect("Failed to reset POWER_CAP");
 
+    // Reset POWER_PROFILE_INDEX
+    let mut file = OpenOptions::new().write(true)
+        .open(format!("{}/pp_power_profile_mode", home_path))
+        .expect("Can't access pp_od_clk_voltage file");
+    write!(&mut file, "0") // 0 is BOOTUP_DEFAULT
+        .expect("Failed to reset power profile to BOOTUP_DEFAULT");
+
     // Reset pp_od_clk_voltage
     let mut file = OpenOptions::new().write(true)
         .open(format!("{}/pp_od_clk_voltage", home_path))
         .expect("Can't access pp_od_clk_voltage file");
-    println!("Resetting card{}...", card_num);
     write!(&mut file, "r")
         .expect("Failed to reset card with pp_od_clk_voltage_file");
 
     // NOTE: AMDGPU driver also resets every settings that is "committable".
     // By "committable", see https://docs.kernel.org/gpu/amdgpu/thermal.html for all settings that require an explicit "c" to commit
+
 
     println!("Success!");
 }
@@ -243,12 +294,29 @@ fn read_card_settings(path: &str) {
     let card_num: u8 = (&card[6..]).parse().expect("Invalid card mount point: Check /sys/class/drm/card#");
 
     println!("---------- Card {} Settings ----------", card_num);
-    // POWER_CAP
     let home_path = format!("/sys/class/drm/card{}/device", card_num);
+    // PERFORMANCE_LEVEL
+    let file = File::open(format!("{}/power_dpm_force_performance_level", home_path))
+        .expect("Can't access power_dpm_force_performance_level");
+    for line in BufReader::new(file).lines().map_while(Result::ok) {
+        println!("PERFORMANCE_LEVEL: {}\n", line);
+    }
+
+    // POWER_PROFILE
+    let file = File::open(format!("{}/pp_power_profile_mode", home_path))
+        .expect("Can't access pp_power_profile_mode");
+    println!("POWER_PROFILE_INDEX");
+    for line in BufReader::new(file).lines().map_while(Result::ok) {
+        if line.contains("*") {
+            println!("{}\n", line);
+        }
+    }
+
+    // POWER_CAP
     let file = File::open(format!("{}/hwmon/hwmon1/power1_cap", home_path))
         .expect("Can't access power1_cap file");
     for line in BufReader::new(file).lines().map_while(Result::ok) {
-        println!("POWER_CAP: {} ({} W)", line, line.parse::<f32>().unwrap() / 1e6);
+        println!("POWER_CAP:\n{} ({} W)", line, line.parse::<f32>().unwrap() / 1e6);
     }
     println!();
     // PP_OD_CLK_VOLTAGE
@@ -317,6 +385,7 @@ fn main() {
         Some(Commands::Set{profile}) => {
             let config_profile = CONFIG_PROFILE_PATH.to_owned() + &profile;
             let config = parse_profile(&config_profile);
+            reset_settings(&config_profile);
             apply_settings(&profile, &config);
         },
         Some(Commands::Reset{profile}) => {
