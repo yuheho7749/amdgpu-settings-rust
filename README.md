@@ -9,7 +9,7 @@ Inspired by [amdgpu-clocks](https://github.com/sibradzic/amdgpu-clocks).
 - `Systemd` service to automatically apply profile on startup.
 - Support multiple GPU profiles.
 
-> [!NOTE]
+> [!WARNING]
 > This is only developed and tested using a RDNA 3 GPU.
 
 ## Prerequisites
