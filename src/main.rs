@@ -55,7 +55,7 @@ fn parse_power_profile_index(config: &mut DeviceConfig, lines: &[String]) {
 
 // RDNA 4 core clk speed
 fn parse_od_sclk_offset(config: &mut DeviceConfig, lines: &[String]) {
-    let sclk_offset: i32 = (&lines[1][3..].split("M").collect::<Vec<&str>>()[0])
+    let sclk_offset: i32 = (&lines[1].split("M").collect::<Vec<&str>>()[0])
         .parse().expect("Invalid OD_SCLK_OFFSET option");
     config.od_sclk_offset = Some(sclk_offset);
 }
