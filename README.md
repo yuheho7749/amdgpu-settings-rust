@@ -5,15 +5,17 @@ CLI tool written in Rust to monitor and tune AMDGPU settings.
 Inspired by [amdgpu-clocks](https://github.com/sibradzic/amdgpu-clocks).
 
 ## Features
-- Supports RDNA 3. RDNA 2 or older might work, but is untested. RDNA 4 is unsupported at the moment.
+- Supports RDNA 3 and RDNA 4 (Linux 6.14 required for RDNA 4). RDNA 2 or older might work, but is untested.
 - `Systemd` service to automatically apply profile on startup.
 - Support multiple GPU profiles.
 
 > [!WARNING]
-> This is only developed and tested using a RDNA 3 GPU.
+> Development and testing has migrated to RDNA 4 platform. RDNA 3 testing is deprecated.
 
 ## Prerequisites
-- Linux kernel 6.13 or newer (required for `FAN_ZERO_RPM_ENABLE` and `FAN_ZERO_RPM_STOP_TEMPERATURE` settings) OR Linux kernel 6.10 or newer.
+- Linux kernel 6.10 or newer.
+- Linux kernel 6.13 or newer for `FAN_ZERO_RPM_ENABLE` and `FAN_ZERO_RPM_STOP_TEMPERATURE` settings.
+- Linux kernel 6.14 or newer for RDNA 4.
 - Kernel parameters must be set according to [this](https://wiki.archlinux.org/title/AMDGPU#Boot_parameter).
 - Cargo
 
@@ -45,7 +47,8 @@ The profile **MUST** have `CARD: #` as the first line. That will be used to find
 The currently supported options are:
 - `PERFORMANCE_LEVEL` Unless specified, applying a new profile will default to the `manual` [performance level](https://wiki.archlinux.org/title/AMDGPU#Performance_levels).
 - `POWER_PROFILE_INDEX` ([Power profiles](https://wiki.archlinux.org/title/AMDGPU#Power_profiles): e.g. BOOTUP_DEFAULT, 3D_FULL_SCREEN, COMPUTE, etc)
-- `OD_SCLK` (the '0: [value]Mhz' means min frequency and '1: [value]Mhz' means max frequency)
+- `OD_SCLK_OFFSET` RDNA 4 specific setting
+- `OD_SCLK` RDNA 3 or older specific setting (the '0: [value]Mhz' means min frequency and '1: [value]Mhz' means max frequency)
 - `OD_MCLK` (the '0: [value]Mhz' means min frequency and '1: [value]Mhz' means max frequency)
 - `OD_VDDGFX_OFFSET` GPU core voltage offset
 - `POWER_CAP`
@@ -53,7 +56,8 @@ The currently supported options are:
 - `FAN_ZERO_RPM_ENABLE` (Only available on Linux 6.13 or newer)
 - `FAN_ZERO_RPM_STOP_TEMPERATURE` (Only available on Linux 6.13 or newer)
 
-An example of a GPU profile is shown below:
+### RDNA 3 or older
+An example of a RDNA 3 GPU profile is shown below:
 ```
 CARD: 1
 
@@ -71,6 +75,36 @@ OD_VDDGFX_OFFSET:
 
 POWER_CAP:
 240000000
+
+FAN_TARGET_TEMPERATURE:
+80
+
+FAN_ZERO_RPM_ENABLE:
+1
+
+FAN_ZERO_RPM_STOP_TEMPERATURE:
+50
+```
+
+### RDNA 4
+An example of a RDNA 4 GPU profile is shown below:
+```
+CARD: 1
+
+PERFORMANCE_LEVEL:
+manual
+
+POWER_PROFILE_INDEX:
+0
+
+OD_SCLK_OFFSET:
+-100Mhz
+
+OD_VDDGFX_OFFSET:
+-50mV
+
+POWER_CAP:
+290000000
 
 FAN_TARGET_TEMPERATURE:
 80

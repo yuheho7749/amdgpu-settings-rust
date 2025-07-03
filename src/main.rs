@@ -55,23 +55,9 @@ fn parse_power_profile_index(config: &mut DeviceConfig, lines: &[String]) {
 
 // RDNA 4 core clk speed
 fn parse_od_sclk_offset(config: &mut DeviceConfig, lines: &[String]) {
-    let mut i: usize = 1;
-
-    while lines[i].len() != 0 {
-        let sclk: (char, i32) = (
-            lines[i].chars().nth(0).expect("Invalid OD_SCLK_OFFSET option"),
-            (&lines[i][3..].split("M").collect::<Vec<&str>>()[0])
-                .parse().expect("Invalid OD_SCLK_OFFSET option")
-        );
-        match sclk.0 {
-            '1' => config.od_sclk_offset = Some(sclk.1),
-            _ => {
-                println!("Invalid OD_SCLK_OFFSET option");
-                return;
-            },
-        }
-        i += 1;
-    }
+    let sclk_offset: i32 = (&lines[1][3..].split("M").collect::<Vec<&str>>()[0])
+        .parse().expect("Invalid OD_SCLK_OFFSET option");
+    config.od_sclk_offset = Some(sclk_offset);
 }
 
 // RDNA 3 or older clk speed
@@ -280,7 +266,7 @@ fn apply_settings(name: &str, mut config: DeviceConfig) {
         file.write_all(format!("vo {}", config.od_vddgfx_offset.unwrap()).as_bytes())
             .expect("Failed to write od_vddgfx_offset");
     }
-    // NOTE: Commit to pp_od_clk_voltage (but it will actually just commit all "committable" settings on RDNA 3 or newer)
+    // NOTE: Commit to pp_od_clk_voltage (but it will actually just commit all "committable" settings on at least RDNA 3 or newer)
     // By "committable", see https://docs.kernel.org/gpu/amdgpu/thermal.html for all settings that require an explicit "c" to commit
     file.write_all("c".as_bytes())
         .expect("Failed to commit final settings");
