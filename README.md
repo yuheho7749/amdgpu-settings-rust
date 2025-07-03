@@ -5,7 +5,7 @@ CLI tool written in Rust to monitor and tune AMDGPU settings.
 Inspired by [amdgpu-clocks](https://github.com/sibradzic/amdgpu-clocks).
 
 ## Features
-- Supports RDNA 3 and RDNA 4 (Linux 6.14 required for RDNA 4). RDNA 2 or older might work, but is untested.
+- Supports RDNA 3 and RDNA 4 (at least Linux 6.12 for RDNA 4). RDNA 2 or older might work, but is untested.
 - `Systemd` service to automatically apply profile on startup.
 - Support multiple GPU profiles.
 
@@ -15,7 +15,7 @@ Inspired by [amdgpu-clocks](https://github.com/sibradzic/amdgpu-clocks).
 ## Prerequisites
 - Linux kernel 6.10 or newer.
 - Linux kernel 6.13 or newer for `FAN_ZERO_RPM_ENABLE` and `FAN_ZERO_RPM_STOP_TEMPERATURE` settings.
-- Linux kernel 6.14 or newer for RDNA 4.
+- Linux kernel 6.12 or newer for RDNA 4 (Linux 6.14 is recommended).
 - Kernel parameters must be set according to [this](https://wiki.archlinux.org/title/AMDGPU#Boot_parameter).
 - Cargo
 
