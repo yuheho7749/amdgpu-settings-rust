@@ -188,10 +188,10 @@ fn apply_settings(name: &str, mut config: DeviceConfig) {
         .open(format!("{}/power_dpm_force_performance_level", config.home_path))
         .expect("Can't access power_dpm_force_performance_level file");
     if config.performance_level.is_some() {
-        write!(&mut file, "{}", config.performance_level.as_deref().unwrap_or("manual"))
+        file.write_all(config.performance_level.as_deref().unwrap_or("manual").as_bytes())
             .expect("Failed to write power_dpm_force_performance_level");
     } else {
-        write!(&mut file, "manual")
+        file.write_all("manual".as_bytes())
             .expect("Failed to write power_dpm_force_performance_level to \"manual\"");
     }
 
@@ -201,7 +201,7 @@ fn apply_settings(name: &str, mut config: DeviceConfig) {
         let mut file = OpenOptions::new().write(true)
             .open(format!("{}/power1_cap", config.hwmon_path))
             .expect("Can't access power1_cap file");
-        write!(&mut file, "{}", config.power_cap.unwrap())
+        file.write_all(config.power_cap.unwrap().to_string().as_bytes())
             .expect("Failed to set POWER_CAP");
     }
 
@@ -210,7 +210,7 @@ fn apply_settings(name: &str, mut config: DeviceConfig) {
         let mut file = OpenOptions::new().write(true)
             .open(format!("{}/pp_power_profile_mode", config.home_path))
             .expect("Can't access pp_power_profile_mode file");
-        write!(&mut file, "{}", config.power_profile_index.unwrap())
+        file.write_all(config.power_profile_index.unwrap().to_string().as_bytes())
             .expect("Failed to set POWER_PROFILE_INDEX");
     }
 
@@ -219,7 +219,7 @@ fn apply_settings(name: &str, mut config: DeviceConfig) {
         let mut file = OpenOptions::new().write(true)
             .open(format!("{}/gpu_od/fan_ctrl/fan_target_temperature", config.home_path))
             .expect("Can't access fan_target_temperature file");
-        write!(&mut file, "{}", format!("{}\n", config.fan_target_temp.unwrap()))
+        file.write_all(format!("{}\n", config.fan_target_temp.unwrap()).as_bytes())
             .expect("Failed to write FAN_TARGET_TEMPERATURE");
     }
     // FAN_ZERO_RPM_ENABLE
@@ -227,7 +227,7 @@ fn apply_settings(name: &str, mut config: DeviceConfig) {
         let file_result = OpenOptions::new().write(true)
             .open(format!("{}/gpu_od/fan_ctrl/fan_zero_rpm_enable", config.home_path));
         if let Ok(mut file) = file_result {
-            write!(&mut file, "{}", format!("{}\n", config.fan_zero_rpm.unwrap()))
+            file.write_all(format!("{}\n", config.fan_zero_rpm.unwrap()).as_bytes())
                 .expect("Failed to write FAN_ZERO_RPM_ENABLE");
         } else {
             println!("Skip setting FAN_ZERO_RPM_ENABLE. Make sure to have Linux 6.13 or newer.");
@@ -238,7 +238,7 @@ fn apply_settings(name: &str, mut config: DeviceConfig) {
         let file_result = OpenOptions::new().write(true)
             .open(format!("{}/gpu_od/fan_ctrl/fan_zero_rpm_stop_temperature", config.home_path));
         if let Ok(mut file) = file_result {
-            write!(&mut file, "{}", format!("{}\n", config.fan_zero_rpm_stop_temp.unwrap()))
+            file.write_all(format!("{}\n", config.fan_zero_rpm_stop_temp.unwrap()).as_bytes())
                 .expect("Failed to write FAN_ZERO_RPM_STOP_TEMPERATURE");
         } else {
             println!("Skip setting FAN_ZERO_RPM_STOP_TEMPERATURE. Make sure to have Linux 6.13 or newer.");
@@ -253,38 +253,36 @@ fn apply_settings(name: &str, mut config: DeviceConfig) {
     // OD_SCLK_OFFSET (RDNA 4)
     if config.od_sclk_offset.is_some() {
         if config.od_sclk_offset.is_some() {
-            write!(&mut file, "{}", format!("s {}", config.od_sclk_offset.unwrap()))
+            file.write_all(format!("s {}", config.od_sclk_offset.unwrap()).as_bytes())
                 .expect("Failed to write od_sclk_offset");
-            // file.write_all(format!("s {}", config.od_sclk_offset.unwrap()).as_bytes())
-            //     .expect("Failed to write od_sclk_offset");
         }
     } else { // OD_SCLK (RDNA 3 or older)
         if config.od_sclk_min.is_some() {
-            write!(&mut file, "{}", format!("s 0 {}", config.od_sclk_min.unwrap()))
+            file.write_all(format!("s 0 {}", config.od_sclk_min.unwrap()).as_bytes())
                 .expect("Failed to write od_sclk_min");
         }
         if config.od_sclk_max.is_some() {
-            write!(&mut file, "{}", format!("s 1 {}", config.od_sclk_max.unwrap()))
+            file.write_all(format!("s 1 {}", config.od_sclk_max.unwrap()).as_bytes())
                 .expect("Failed to write od_sclk_max");
         }
     }
     // OD_MCLK
     if config.od_mclk_min.is_some() {
-        write!(&mut file, "{}", format!("m 0 {}", config.od_mclk_min.unwrap()))
+        file.write_all(format!("m 0 {}", config.od_mclk_min.unwrap()).as_bytes())
             .expect("Failed to write od_mclk_min");
     }
     if config.od_mclk_max.is_some() {
-        write!(&mut file, "{}", format!("m 1 {}", config.od_mclk_max.unwrap()))
+        file.write_all(format!("m 1 {}", config.od_mclk_max.unwrap()).as_bytes())
             .expect("Failed to write od_mclk_max");
     }
     // OD_VDDGFX_OFFSET
     if config.od_vddgfx_offset.is_some() {
-        write!(&mut file, "{}", format!("vo {}", config.od_vddgfx_offset.unwrap()))
+        file.write_all(format!("vo {}", config.od_vddgfx_offset.unwrap()).as_bytes())
             .expect("Failed to write od_vddgfx_offset");
     }
-    // NOTE: Commit to pp_od_clk_voltage (but it will actually just commit all "committable" settings on RDNA 3)
+    // NOTE: Commit to pp_od_clk_voltage (but it will actually just commit all "committable" settings on RDNA 3 or newer)
     // By "committable", see https://docs.kernel.org/gpu/amdgpu/thermal.html for all settings that require an explicit "c" to commit
-    write!(&mut file, "c")
+    file.write_all("c".as_bytes())
         .expect("Failed to commit final settings");
     println!("Success!");
 }
@@ -307,11 +305,10 @@ fn reset_settings(path: &str) {
     let mut file = OpenOptions::new().write(true)
         .open(format!("{}/power_dpm_force_performance_level", config.home_path))
         .expect("Can't access power_dpm_force_performance_level file");
-    write!(&mut file, "auto")
+    file.write_all("auto".as_bytes())
         .expect("Failed to reset power_dpm_force_performance_level to \"auto\"");
 
     // Reset POWER_CAP
-    // TODO: fix hardcode hwmon1
     let file = File::open(format!("{}/power1_cap_default", config.hwmon_path))
         .expect("Can't access power1_cap file");
     let power_cap_default_lines: Vec<String> = BufReader::new(file).lines()
@@ -321,21 +318,21 @@ fn reset_settings(path: &str) {
     let mut file = OpenOptions::new().write(true)
         .open(format!("{}/power1_cap", config.hwmon_path))
         .expect("Can't access power1_cap file");
-    write!(&mut file, "{}", power_cap_default)
+    file.write_all(power_cap_default.as_bytes())
         .expect("Failed to reset POWER_CAP");
 
     // Reset POWER_PROFILE_INDEX
     let mut file = OpenOptions::new().write(true)
         .open(format!("{}/pp_power_profile_mode", config.home_path))
         .expect("Can't access pp_od_clk_voltage file");
-    write!(&mut file, "0") // 0 is BOOTUP_DEFAULT
+    file.write_all("0".as_bytes()) // 0 is BOOTUP_DEFAULT
         .expect("Failed to reset power profile to BOOTUP_DEFAULT");
 
     // Reset pp_od_clk_voltage
     let mut file = OpenOptions::new().write(true)
         .open(format!("{}/pp_od_clk_voltage", config.home_path))
         .expect("Can't access pp_od_clk_voltage file");
-    write!(&mut file, "r")
+    file.write_all("r".as_bytes())
         .expect("Failed to reset card with pp_od_clk_voltage_file");
 
     // NOTE: AMDGPU driver also resets every settings that is "committable".
