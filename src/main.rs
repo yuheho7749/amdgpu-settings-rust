@@ -1,16 +1,21 @@
 use std::fs::{File, OpenOptions};
+use std::path::Path;
 use std::io::{BufRead, BufReader, Write};
 use clap::{Parser, Subcommand};
+use glob::glob;
 
 const CONFIG_PROFILE_PATH: &str = "/etc/default/amdgpu-settings.";
 
 #[derive(Default, Debug)]
 struct DeviceConfig {
-    card: u32,
+    card: u8,
+    home_path: String,
+    hwmon_path: String,
     performance_level: Option<String>,
     power_profile_index: Option<u8>,
-    od_sclk_min: Option<u32>,
-    od_sclk_max: Option<u32>,
+    od_sclk_min: Option<u32>, // RNDA 3 or older
+    od_sclk_max: Option<u32>, // RNDA 3 or older
+    od_sclk_offset: Option<i32>, // RDNA 4
     od_mclk_min: Option<u32>,
     od_mclk_max: Option<u32>,
     od_vddgfx_offset: Option<i32>,
@@ -19,6 +24,24 @@ struct DeviceConfig {
     fan_zero_rpm: Option<u8>,
     fan_zero_rpm_stop_temp: Option<u32>,
 }
+
+fn validate_detect_mount_points(config: &mut DeviceConfig) {
+    let home_path = format!("/sys/class/drm/card{}", config.card);
+    if !Path::new(&home_path).exists() {
+        panic!("Fatal error: Unable to locate card mount point. Please check /sys/class/drm/card# and update gpu profile.");
+    }
+    config.home_path = format!("{}/device", home_path);
+    for entry in glob(&format!("{}/hwmon/hwmon*", config.home_path)).expect("Failed to detect hwmon path") {
+        if let Ok(path) = entry {
+            if let Some(path_str) = path.to_str() {
+                config.hwmon_path = path_str.to_string();
+                return;
+            }
+        }
+    }
+    panic!("Unable to detect hwmon_path!!!");
+}
+
 
 fn parse_performance_level(config: &mut DeviceConfig, lines: &[String]) {
     let value = lines[1].parse().expect("Invalid PERFORMANCE_LEVEL");
@@ -30,6 +53,14 @@ fn parse_power_profile_index(config: &mut DeviceConfig, lines: &[String]) {
     config.power_profile_index = Some(value);
 }
 
+// RDNA 4 core clk speed
+fn parse_od_sclk_offset(config: &mut DeviceConfig, lines: &[String]) {
+    let sclk_offset: i32 = (&lines[1].split("M").collect::<Vec<&str>>()[0])
+        .parse().expect("Invalid OD_SCLK_OFFSET option");
+    config.od_sclk_offset = Some(sclk_offset);
+}
+
+// RDNA 3 or older clk speed
 fn parse_od_sclk(config: &mut DeviceConfig, lines: &[String]) {
     let mut i: usize = 1;
 
@@ -106,16 +137,18 @@ fn parse_profile(path: &str) -> DeviceConfig {
         .map(|l| l.expect("Can't parse line"))
         .collect();
     let card: &str = &lines[0];
-    let card: (&str, u32) = (&card[..4], (&card[6..])
+    let card: (&str, u8) = (&card[..4], (&card[6..])
         .parse().expect("Invalid card mount point: Check /sys/class/drm/card#"));
 
     let mut config = DeviceConfig{card: card.1, ..Default::default()};
+    validate_detect_mount_points(&mut config);
     let mut i: usize = 0;
     while i < lines.len() {
         let line: &str = &lines[i].trim();
         match line {
             "PERFORMANCE_LEVEL:" => parse_performance_level(&mut config, &lines[i..]),
             "POWER_PROFILE_INDEX:" => parse_power_profile_index(&mut config, &lines[i..]),
+            "OD_SCLK_OFFSET:" => parse_od_sclk_offset(&mut config, &lines[i..]),
             "OD_SCLK:" => parse_od_sclk(&mut config, &lines[i..]),
             "OD_MCLK:" => parse_od_mclk(&mut config, &lines[i..]),
             "OD_VDDGFX_OFFSET:" => parse_od_vddgfx_offset(&mut config, &lines[i..]),
@@ -130,20 +163,21 @@ fn parse_profile(path: &str) -> DeviceConfig {
     return config;
 }
 
-fn apply_settings(name: &str, config: &DeviceConfig) {
-    let home_path = format!("/sys/class/drm/card{}/device", config.card);
+fn apply_settings(name: &str, mut config: DeviceConfig) {
+    validate_detect_mount_points(&mut config);
+    // let home_path = format!("/sys/class/drm/card{}/device", config.card);
     println!("---------- {} Settings ----------", name.to_uppercase());
     println!("{:#?}", config);
 
     // PERFORMANCE_LEVEL
     let mut file = OpenOptions::new().write(true)
-        .open(format!("{}/power_dpm_force_performance_level", home_path))
+        .open(format!("{}/power_dpm_force_performance_level", config.home_path))
         .expect("Can't access power_dpm_force_performance_level file");
     if config.performance_level.is_some() {
-        write!(&mut file, "{}", config.performance_level.as_deref().unwrap_or("manual"))
+        file.write_all(config.performance_level.as_deref().unwrap_or("manual").as_bytes())
             .expect("Failed to write power_dpm_force_performance_level");
     } else {
-        write!(&mut file, "manual")
+        file.write_all("manual".as_bytes())
             .expect("Failed to write power_dpm_force_performance_level to \"manual\"");
     }
 
@@ -151,35 +185,35 @@ fn apply_settings(name: &str, config: &DeviceConfig) {
     // before adjusting the other settings)
     if config.power_cap.is_some() {
         let mut file = OpenOptions::new().write(true)
-            .open(format!("{}/hwmon/hwmon1/power1_cap", home_path))
+            .open(format!("{}/power1_cap", config.hwmon_path))
             .expect("Can't access power1_cap file");
-        write!(&mut file, "{}", config.power_cap.unwrap())
+        file.write_all(config.power_cap.unwrap().to_string().as_bytes())
             .expect("Failed to set POWER_CAP");
     }
 
     // POWER_PROFILE_INDEX
     if config.power_profile_index.is_some() {
         let mut file = OpenOptions::new().write(true)
-            .open(format!("{}/pp_power_profile_mode", home_path))
+            .open(format!("{}/pp_power_profile_mode", config.home_path))
             .expect("Can't access pp_power_profile_mode file");
-        write!(&mut file, "{}", config.power_profile_index.unwrap())
+        file.write_all(config.power_profile_index.unwrap().to_string().as_bytes())
             .expect("Failed to set POWER_PROFILE_INDEX");
     }
 
     // FAN_TARGET_TEMPERATURE 
     if config.fan_target_temp.is_some() {
         let mut file = OpenOptions::new().write(true)
-            .open(format!("{}/gpu_od/fan_ctrl/fan_target_temperature", home_path))
+            .open(format!("{}/gpu_od/fan_ctrl/fan_target_temperature", config.home_path))
             .expect("Can't access fan_target_temperature file");
-        write!(&mut file, "{}", format!("{}\n", config.fan_target_temp.unwrap()))
+        file.write_all(format!("{}\n", config.fan_target_temp.unwrap()).as_bytes())
             .expect("Failed to write FAN_TARGET_TEMPERATURE");
     }
     // FAN_ZERO_RPM_ENABLE
     if config.fan_zero_rpm.is_some() {
         let file_result = OpenOptions::new().write(true)
-            .open(format!("{}/gpu_od/fan_ctrl/fan_zero_rpm_enable", home_path));
+            .open(format!("{}/gpu_od/fan_ctrl/fan_zero_rpm_enable", config.home_path));
         if let Ok(mut file) = file_result {
-            write!(&mut file, "{}", format!("{}\n", config.fan_zero_rpm.unwrap()))
+            file.write_all(format!("{}\n", config.fan_zero_rpm.unwrap()).as_bytes())
                 .expect("Failed to write FAN_ZERO_RPM_ENABLE");
         } else {
             println!("Skip setting FAN_ZERO_RPM_ENABLE. Make sure to have Linux 6.13 or newer.");
@@ -188,9 +222,9 @@ fn apply_settings(name: &str, config: &DeviceConfig) {
     // FAN_ZERO_RPM_STOP_TEMPERATURE
     if config.fan_zero_rpm_stop_temp.is_some() {
         let file_result = OpenOptions::new().write(true)
-            .open(format!("{}/gpu_od/fan_ctrl/fan_zero_rpm_stop_temperature", home_path));
+            .open(format!("{}/gpu_od/fan_ctrl/fan_zero_rpm_stop_temperature", config.home_path));
         if let Ok(mut file) = file_result {
-            write!(&mut file, "{}", format!("{}\n", config.fan_zero_rpm_stop_temp.unwrap()))
+            file.write_all(format!("{}\n", config.fan_zero_rpm_stop_temp.unwrap()).as_bytes())
                 .expect("Failed to write FAN_ZERO_RPM_STOP_TEMPERATURE");
         } else {
             println!("Skip setting FAN_ZERO_RPM_STOP_TEMPERATURE. Make sure to have Linux 6.13 or newer.");
@@ -199,34 +233,42 @@ fn apply_settings(name: &str, config: &DeviceConfig) {
 
     // pp_od_clk_voltage
     let mut file = OpenOptions::new().write(true)
-        .open(format!("{}/pp_od_clk_voltage", home_path))
+        .open(format!("{}/pp_od_clk_voltage", config.home_path))
         .expect("Can't access pp_od_clk_voltage file");
-    // OD_SCLK
-    if config.od_sclk_min.is_some() {
-        write!(&mut file, "{}", format!("s 0 {}", config.od_sclk_min.unwrap()))
-            .expect("Failed to write od_sclk_min");
-    }
-    if config.od_sclk_max.is_some() {
-        write!(&mut file, "{}", format!("s 1 {}", config.od_sclk_max.unwrap()))
-            .expect("Failed to write od_sclk_max");
+
+    // OD_SCLK_OFFSET (RDNA 4)
+    if config.od_sclk_offset.is_some() {
+        if config.od_sclk_offset.is_some() {
+            file.write_all(format!("s {}", config.od_sclk_offset.unwrap()).as_bytes())
+                .expect("Failed to write od_sclk_offset");
+        }
+    } else { // OD_SCLK (RDNA 3 or older)
+        if config.od_sclk_min.is_some() {
+            file.write_all(format!("s 0 {}", config.od_sclk_min.unwrap()).as_bytes())
+                .expect("Failed to write od_sclk_min");
+        }
+        if config.od_sclk_max.is_some() {
+            file.write_all(format!("s 1 {}", config.od_sclk_max.unwrap()).as_bytes())
+                .expect("Failed to write od_sclk_max");
+        }
     }
     // OD_MCLK
     if config.od_mclk_min.is_some() {
-        write!(&mut file, "{}", format!("m 0 {}", config.od_mclk_min.unwrap()))
+        file.write_all(format!("m 0 {}", config.od_mclk_min.unwrap()).as_bytes())
             .expect("Failed to write od_mclk_min");
     }
     if config.od_mclk_max.is_some() {
-        write!(&mut file, "{}", format!("m 1 {}", config.od_mclk_max.unwrap()))
+        file.write_all(format!("m 1 {}", config.od_mclk_max.unwrap()).as_bytes())
             .expect("Failed to write od_mclk_max");
     }
     // OD_VDDGFX_OFFSET
     if config.od_vddgfx_offset.is_some() {
-        write!(&mut file, "{}", format!("vo {}", config.od_vddgfx_offset.unwrap()))
+        file.write_all(format!("vo {}", config.od_vddgfx_offset.unwrap()).as_bytes())
             .expect("Failed to write od_vddgfx_offset");
     }
-    // NOTE: Commit to pp_od_clk_voltage (but it will actually just commit all "committable" settings on RDNA 3)
+    // NOTE: Commit to pp_od_clk_voltage (but it will actually just commit all "committable" settings on at least RDNA 3 or newer)
     // By "committable", see https://docs.kernel.org/gpu/amdgpu/thermal.html for all settings that require an explicit "c" to commit
-    write!(&mut file, "c")
+    file.write_all("c".as_bytes())
         .expect("Failed to commit final settings");
     println!("Success!");
 }
@@ -240,41 +282,43 @@ fn reset_settings(path: &str) {
     let card: &str = &lines[0];
     let card_num: u8 = (&card[6..]).parse().expect("Invalid card mount point: Check /sys/class/drm/card#");
 
-    println!("Resetting card{}...", card_num);
-    let home_path = format!("/sys/class/drm/card{}/device", card_num);
+    let mut config = DeviceConfig{card: card_num, ..Default::default()};
+    validate_detect_mount_points(&mut config);
+    println!("Resetting card{}...", config.card);
+    // let home_path = format!("/sys/class/drm/card{}/device", card_num);
 
     // Reset PERFORMANCE_LEVEL
     let mut file = OpenOptions::new().write(true)
-        .open(format!("{}/power_dpm_force_performance_level", home_path))
+        .open(format!("{}/power_dpm_force_performance_level", config.home_path))
         .expect("Can't access power_dpm_force_performance_level file");
-    write!(&mut file, "auto")
+    file.write_all("auto".as_bytes())
         .expect("Failed to reset power_dpm_force_performance_level to \"auto\"");
 
     // Reset POWER_CAP
-    let file = File::open(format!("{}/hwmon/hwmon1/power1_cap_default", home_path))
+    let file = File::open(format!("{}/power1_cap_default", config.hwmon_path))
         .expect("Can't access power1_cap file");
     let power_cap_default_lines: Vec<String> = BufReader::new(file).lines()
         .map(|l| l.expect("Can't parse line"))
         .collect();
     let power_cap_default = &power_cap_default_lines[0];
     let mut file = OpenOptions::new().write(true)
-        .open(format!("{}/hwmon/hwmon1/power1_cap", home_path))
+        .open(format!("{}/power1_cap", config.hwmon_path))
         .expect("Can't access power1_cap file");
-    write!(&mut file, "{}", power_cap_default)
+    file.write_all(power_cap_default.as_bytes())
         .expect("Failed to reset POWER_CAP");
 
     // Reset POWER_PROFILE_INDEX
     let mut file = OpenOptions::new().write(true)
-        .open(format!("{}/pp_power_profile_mode", home_path))
+        .open(format!("{}/pp_power_profile_mode", config.home_path))
         .expect("Can't access pp_od_clk_voltage file");
-    write!(&mut file, "0") // 0 is BOOTUP_DEFAULT
+    file.write_all("0".as_bytes()) // 0 is BOOTUP_DEFAULT
         .expect("Failed to reset power profile to BOOTUP_DEFAULT");
 
     // Reset pp_od_clk_voltage
     let mut file = OpenOptions::new().write(true)
-        .open(format!("{}/pp_od_clk_voltage", home_path))
+        .open(format!("{}/pp_od_clk_voltage", config.home_path))
         .expect("Can't access pp_od_clk_voltage file");
-    write!(&mut file, "r")
+    file.write_all("r".as_bytes())
         .expect("Failed to reset card with pp_od_clk_voltage_file");
 
     // NOTE: AMDGPU driver also resets every settings that is "committable".
@@ -293,17 +337,20 @@ fn read_card_settings(path: &str) {
     let card: &str = &lines[0];
     let card_num: u8 = (&card[6..]).parse().expect("Invalid card mount point: Check /sys/class/drm/card#");
 
-    println!("---------- Card {} Settings ----------", card_num);
-    let home_path = format!("/sys/class/drm/card{}/device", card_num);
+    let mut config = DeviceConfig{card: card_num, ..Default::default()};
+    validate_detect_mount_points(&mut config);
+
+    println!("---------- Card {} Settings ----------", config.card);
+    // let home_path = format!("/sys/class/drm/card{}/device", card_num);
     // PERFORMANCE_LEVEL
-    let file = File::open(format!("{}/power_dpm_force_performance_level", home_path))
+    let file = File::open(format!("{}/power_dpm_force_performance_level", config.home_path))
         .expect("Can't access power_dpm_force_performance_level");
     for line in BufReader::new(file).lines().map_while(Result::ok) {
         println!("PERFORMANCE_LEVEL: {}\n", line);
     }
 
     // POWER_PROFILE
-    let file = File::open(format!("{}/pp_power_profile_mode", home_path))
+    let file = File::open(format!("{}/pp_power_profile_mode", config.home_path))
         .expect("Can't access pp_power_profile_mode");
     println!("POWER_PROFILE_INDEX");
     for line in BufReader::new(file).lines().map_while(Result::ok) {
@@ -313,20 +360,20 @@ fn read_card_settings(path: &str) {
     }
 
     // POWER_CAP
-    let file = File::open(format!("{}/hwmon/hwmon1/power1_cap", home_path))
+    let file = File::open(format!("{}/power1_cap", config.hwmon_path))
         .expect("Can't access power1_cap file");
     for line in BufReader::new(file).lines().map_while(Result::ok) {
         println!("POWER_CAP:\n{} ({} W)", line, line.parse::<f32>().unwrap() / 1e6);
     }
     println!();
     // PP_OD_CLK_VOLTAGE
-    let file = File::open(format!("{}/pp_od_clk_voltage", home_path))
+    let file = File::open(format!("{}/pp_od_clk_voltage", config.home_path))
         .expect("Can't access pp_od_clk_voltage file");
     for line in BufReader::new(file).lines().map_while(Result::ok) {
         println!("{}", line);
     }
     // FAN SETTINGS
-    let fan_dir = format!("{}/gpu_od/fan_ctrl", home_path);
+    let fan_dir = format!("{}/gpu_od/fan_ctrl", config.home_path);
     let fan_target_temp_file = File::open(format!("{}/fan_target_temperature", fan_dir))
         .expect("Can't access fan_target_temperature file");
     for line in BufReader::new(fan_target_temp_file).lines().map_while(Result::ok) {
@@ -386,7 +433,7 @@ fn main() {
             let config_profile = CONFIG_PROFILE_PATH.to_owned() + &profile;
             let config = parse_profile(&config_profile);
             reset_settings(&config_profile);
-            apply_settings(&profile, &config);
+            apply_settings(&profile, config);
         },
         Some(Commands::Reset{profile}) => {
             let config_profile = CONFIG_PROFILE_PATH.to_owned() + &profile;
