@@ -54,7 +54,7 @@ The currently supported options are:
 - `POWER_CAP`
 - `FAN_TARGET_TEMPERATURE`
 - `FAN_ZERO_RPM_ENABLE` (Only available on Linux 6.13 or newer)
-- `FAN_ZERO_RPM_STOP_TEMPERATURE` (Only available on Linux 6.13 or newer)
+- `FAN_ZERO_RPM_STOP_TEMPERATURE` (Only available on Linux 6.13 or newer; RDNA4 also seems to be missing this option)
 
 ### RDNA 3 or older
 An example of a RDNA 3 GPU profile is shown below:
@@ -111,7 +111,4 @@ FAN_TARGET_TEMPERATURE:
 
 FAN_ZERO_RPM_ENABLE:
 1
-
-FAN_ZERO_RPM_STOP_TEMPERATURE:
-50
 ```
