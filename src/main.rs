@@ -13,8 +13,8 @@ struct DeviceConfig {
     hwmon_path: String,
     performance_level: Option<String>,
     power_profile_index: Option<u8>,
-    od_sclk_min: Option<u32>, // RNDA 3 or older
-    od_sclk_max: Option<u32>, // RNDA 3 or older
+    od_sclk_min: Option<u32>, // RDNA 2 and 3
+    od_sclk_max: Option<u32>, // RDNA 2 and 3
     od_sclk_offset: Option<i32>, // RDNA 4
     od_mclk_min: Option<u32>,
     od_mclk_max: Option<u32>,
