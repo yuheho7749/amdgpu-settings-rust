@@ -1,3 +1,11 @@
+// SPDX-License-Identifier: GPL-2.0-only
+
+/*
+ * CLI tool for AMD RDNA GPUs
+ *
+ * Copyright (c) 2025 yuheho7749
+ */
+
 use std::fs::{File, OpenOptions};
 use std::path::Path;
 use std::io::{BufRead, BufReader, Write};
