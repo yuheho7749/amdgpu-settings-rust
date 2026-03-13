@@ -24,7 +24,7 @@ Inspired by [amdgpu-clocks](https://github.com/sibradzic/amdgpu-clocks).
 2. `cp` the `amdgpu-settings.example` profile to `/etc/default/amdgpu-settings.[PROFILE_NAME]`. It is HIGHLY recommended to have `/etc/default/amdgpu-settings.default` as it will be the profile used by default.
 
 > [!TIP]
-> Use a symlink to set the default profile `/etc/default/amdgpu-settings.default`. Additionally, you define multiple profiles `/etc/default/amdgpu-settings.[PROFILE_NAME]` and quickly swap profiles with `sudo amdgpu-settings set [PROFILE_NAME]`
+> Use a symlink to set the default profile `/etc/default/amdgpu-settings.default`. Additionally, you can define multiple profiles `/etc/default/amdgpu-settings.[PROFILE_NAME]` and quickly swap profiles with `sudo amdgpu-settings set [PROFILE_NAME]`
 
 ### Optional `Systemd` Installation
 - For auto-start, enable the service with `systemctl enable amdgpu-settings`
@@ -42,7 +42,7 @@ Inspired by [amdgpu-clocks](https://github.com/sibradzic/amdgpu-clocks).
 - `amdgpu-settings --help`.
 
 ## GPU Profile Format
-The profile **MUST** have `CARD: #` as the first line. That will be used to find where the GPU is mounted in the file system. To check which card number your GPU is mounted at, navigate to `/sys/class/drm/`. The GPU will most likely be mounted as `card0` or `card1`, although it may vary from system to system.
+The profile **MUST** have `CARD: #` OR `UNIQUE_ID: #` as the first line. That will be used to find where the GPU is mounted in the file system. To check where your GPU is mounted at, navigate to `/sys/class/drm/`. The GPU will most likely be mounted as `card0` or `card1`, although it may vary from system to system.
 
 The currently supported options are:
 - `PERFORMANCE_LEVEL` Unless specified, applying a new profile will default to the `manual` [performance level](https://wiki.archlinux.org/title/AMDGPU#Performance_levels).
@@ -89,7 +89,7 @@ FAN_ZERO_RPM_STOP_TEMPERATURE:
 ### RDNA 4
 An example of a RDNA 4 GPU profile is shown below:
 ```
-CARD: 1
+UNIQUE_ID: 123456789abcdef0
 
 PERFORMANCE_LEVEL:
 manual
