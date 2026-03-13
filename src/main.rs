@@ -6,8 +6,9 @@
  * Copyright (c) 2025 yuheho7749
  */
 
+use std::fs;
 use std::fs::{File, OpenOptions};
-use std::path::Path;
+use std::path::PathBuf;
 use std::io::{BufRead, BufReader, Write};
 use clap::{Parser, Subcommand};
 use glob::glob;
@@ -16,9 +17,10 @@ const CONFIG_PROFILE_PATH: &str = "/etc/default/amdgpu-settings.";
 
 #[derive(Default, Debug)]
 struct DeviceConfig {
-    card: u8,
-    home_path: String,
-    hwmon_path: String,
+    device_id: Option<u64>,
+    card: Option<u8>,
+    home_path: PathBuf,
+    hwmon_path: PathBuf,
     performance_level: Option<String>,
     power_profile_index: Option<u8>,
     od_sclk_min: Option<u32>, // RDNA 2 and 3
@@ -34,17 +36,36 @@ struct DeviceConfig {
 }
 
 fn validate_detect_mount_points(config: &mut DeviceConfig) {
-    let home_path = format!("/sys/class/drm/card{}", config.card);
-    if !Path::new(&home_path).exists() {
-        panic!("Fatal error: Unable to locate card mount point. Please check /sys/class/drm/card# and update gpu profile.");
-    }
-    config.home_path = format!("{}/device", home_path);
-    for entry in glob(&format!("{}/hwmon/hwmon*", config.home_path)).expect("Failed to detect hwmon path") {
-        if let Ok(path) = entry {
-            if let Some(path_str) = path.to_str() {
-                config.hwmon_path = path_str.to_string();
-                return;
+    let path: PathBuf = if let Some(card) = config.card {
+        // Simple card #
+        PathBuf::from(format!("/sys/class/drm/card{}", card))
+    } else {
+        // Match by unique_id
+        let unique_id = config.device_id.expect("Invalid UNIQUE_ID");
+
+        let mut found_path: Option<PathBuf> = None;
+        for entry in glob("/sys/class/drm/card*").expect("Failed to detect drm card path") {
+            if let Ok(card_path) = entry {
+                let unique_id_path = card_path.join("device/unique_id");
+                if let Ok(target_id_str) = fs::read_to_string(unique_id_path) {
+                    let target_id = u64::from_str_radix(target_id_str.trim(), 16)
+                        .expect("Malformed unique_id");
+                    if target_id == unique_id {
+                        found_path = Some(card_path);
+                        break;
+                    }
+                }
             }
+        }
+        found_path.expect("Fatal error: Unable to locate card mount point by unique_id. Please check /sys/class/drm")
+    };
+
+    config.home_path = path.join("device");
+    let hwmon_pattern = path.join("device/hwmon/hwmon*");
+    for entry in glob(hwmon_pattern.to_str().unwrap()).expect("Failed to detect hwmon path") {
+        if let Ok(hwmon_path) = entry {
+            config.hwmon_path = hwmon_path;
+            return;
         }
     }
     panic!("Unable to detect hwmon_path!!!");
@@ -144,12 +165,17 @@ fn parse_profile(path: &str) -> DeviceConfig {
         .lines()
         .map(|l| l.expect("Can't parse line"))
         .collect();
-    let card: &str = &lines[0];
-    let card: (&str, u8) = (&card[..4], (&card[6..])
-        .parse().expect("Invalid card mount point: Check /sys/class/drm/card#"));
-
-    let mut config = DeviceConfig{card: card.1, ..Default::default()};
+    let id_str: &str = &lines[0];
+    let (id_type, id) = id_str.split_once(char::is_whitespace)
+        .expect("Error parsing CARD/UNIQUE_ID");
+    let mut config = DeviceConfig::default();
+    match id_type {
+        "CARD:" => config.card = Some(id.trim().parse().expect("Invalid CARD #")),
+        "UNIQUE_ID:" => config.device_id = Some(u64::from_str_radix(id.trim(), 16).expect("Invalid UNIQUE_ID #")),
+        _ => panic!("Unknown target device: Check /sys/class/drm"),
+    }
     validate_detect_mount_points(&mut config);
+
     let mut i: usize = 0;
     while i < lines.len() {
         let line: &str = &lines[i].trim();
@@ -173,13 +199,12 @@ fn parse_profile(path: &str) -> DeviceConfig {
 
 fn apply_settings(name: &str, mut config: DeviceConfig) {
     validate_detect_mount_points(&mut config);
-    // let home_path = format!("/sys/class/drm/card{}/device", config.card);
     println!("---------- {} Settings ----------", name.to_uppercase());
     println!("{:#?}", config);
 
     // PERFORMANCE_LEVEL
     let mut file = OpenOptions::new().write(true)
-        .open(format!("{}/power_dpm_force_performance_level", config.home_path))
+        .open(config.home_path.join("power_dpm_force_performance_level"))
         .expect("Can't access power_dpm_force_performance_level file");
     if config.performance_level.is_some() {
         file.write_all(config.performance_level.as_deref().unwrap_or("manual").as_bytes())
@@ -193,7 +218,7 @@ fn apply_settings(name: &str, mut config: DeviceConfig) {
     // before adjusting the other settings)
     if config.power_cap.is_some() {
         let mut file = OpenOptions::new().write(true)
-            .open(format!("{}/power1_cap", config.hwmon_path))
+            .open(config.hwmon_path.join("power1_cap"))
             .expect("Can't access power1_cap file");
         file.write_all(config.power_cap.unwrap().to_string().as_bytes())
             .expect("Failed to set POWER_CAP");
@@ -202,7 +227,7 @@ fn apply_settings(name: &str, mut config: DeviceConfig) {
     // POWER_PROFILE_INDEX
     if config.power_profile_index.is_some() {
         let mut file = OpenOptions::new().write(true)
-            .open(format!("{}/pp_power_profile_mode", config.home_path))
+            .open(config.home_path.join("pp_power_profile_mode"))
             .expect("Can't access pp_power_profile_mode file");
         file.write_all(config.power_profile_index.unwrap().to_string().as_bytes())
             .expect("Failed to set POWER_PROFILE_INDEX");
@@ -211,7 +236,7 @@ fn apply_settings(name: &str, mut config: DeviceConfig) {
     // FAN_TARGET_TEMPERATURE 
     if config.fan_target_temp.is_some() {
         let mut file = OpenOptions::new().write(true)
-            .open(format!("{}/gpu_od/fan_ctrl/fan_target_temperature", config.home_path))
+            .open(config.home_path.join("gpu_od/fan_ctrl/fan_target_temperature"))
             .expect("Can't access fan_target_temperature file");
         file.write_all(format!("{}\n", config.fan_target_temp.unwrap()).as_bytes())
             .expect("Failed to write FAN_TARGET_TEMPERATURE");
@@ -219,7 +244,7 @@ fn apply_settings(name: &str, mut config: DeviceConfig) {
     // FAN_ZERO_RPM_ENABLE
     if config.fan_zero_rpm.is_some() {
         let file_result = OpenOptions::new().write(true)
-            .open(format!("{}/gpu_od/fan_ctrl/fan_zero_rpm_enable", config.home_path));
+            .open(config.home_path.join("gpu_od/fan_ctrl/fan_zero_rpm_enable"));
         if let Ok(mut file) = file_result {
             file.write_all(format!("{}\n", config.fan_zero_rpm.unwrap()).as_bytes())
                 .expect("Failed to write FAN_ZERO_RPM_ENABLE");
@@ -230,7 +255,7 @@ fn apply_settings(name: &str, mut config: DeviceConfig) {
     // FAN_ZERO_RPM_STOP_TEMPERATURE
     if config.fan_zero_rpm_stop_temp.is_some() {
         let file_result = OpenOptions::new().write(true)
-            .open(format!("{}/gpu_od/fan_ctrl/fan_zero_rpm_stop_temperature", config.home_path));
+            .open(config.home_path.join("gpu_od/fan_ctrl/fan_zero_rpm_stop_temperature"));
         if let Ok(mut file) = file_result {
             file.write_all(format!("{}\n", config.fan_zero_rpm_stop_temp.unwrap()).as_bytes())
                 .expect("Failed to write FAN_ZERO_RPM_STOP_TEMPERATURE");
@@ -241,7 +266,7 @@ fn apply_settings(name: &str, mut config: DeviceConfig) {
 
     // pp_od_clk_voltage
     let mut file = OpenOptions::new().write(true)
-        .open(format!("{}/pp_od_clk_voltage", config.home_path))
+        .open(config.home_path.join("pp_od_clk_voltage"))
         .expect("Can't access pp_od_clk_voltage file");
 
     // OD_SCLK_OFFSET (RDNA 4)
@@ -287,44 +312,53 @@ fn reset_settings(path: &str) {
         .lines()
         .map(|l| l.expect("Can't parse line"))
         .collect();
-    let card: &str = &lines[0];
-    let card_num: u8 = (&card[6..]).parse().expect("Invalid card mount point: Check /sys/class/drm/card#");
-
-    let mut config = DeviceConfig{card: card_num, ..Default::default()};
+    let id_str: &str = &lines[0];
+    let (id_type, id) = id_str.split_once(char::is_whitespace)
+        .expect("Error parsing CARD/UNIQUE_ID");
+    let mut config = DeviceConfig::default();
+    match id_type {
+        "CARD:" => config.card = Some(id.trim().parse().expect("Invalid CARD #")),
+        "UNIQUE_ID:" => config.device_id = Some(u64::from_str_radix(id.trim(), 16).expect("Invalid UNIQUE_ID #")),
+        _ => panic!("Unknown target device: Check /sys/class/drm"),
+    }
     validate_detect_mount_points(&mut config);
-    println!("Resetting card{}...", config.card);
-    // let home_path = format!("/sys/class/drm/card{}/device", card_num);
+
+    if config.card.is_some() {
+        println!("Resetting card {}...", config.card.unwrap());
+    } else if config.device_id.is_some() {
+        println!("Resetting device {:x}...", config.device_id.unwrap());
+    }
 
     // Reset PERFORMANCE_LEVEL
     let mut file = OpenOptions::new().write(true)
-        .open(format!("{}/power_dpm_force_performance_level", config.home_path))
+        .open(config.home_path.join("power_dpm_force_performance_level"))
         .expect("Can't access power_dpm_force_performance_level file");
     file.write_all("auto".as_bytes())
         .expect("Failed to reset power_dpm_force_performance_level to \"auto\"");
 
     // Reset POWER_CAP
-    let file = File::open(format!("{}/power1_cap_default", config.hwmon_path))
+    let file = File::open(config.hwmon_path.join("power1_cap_default"))
         .expect("Can't access power1_cap file");
     let power_cap_default_lines: Vec<String> = BufReader::new(file).lines()
         .map(|l| l.expect("Can't parse line"))
         .collect();
     let power_cap_default = &power_cap_default_lines[0];
     let mut file = OpenOptions::new().write(true)
-        .open(format!("{}/power1_cap", config.hwmon_path))
+        .open(config.hwmon_path.join("power1_cap"))
         .expect("Can't access power1_cap file");
     file.write_all(power_cap_default.as_bytes())
         .expect("Failed to reset POWER_CAP");
 
     // Reset POWER_PROFILE_INDEX
     let mut file = OpenOptions::new().write(true)
-        .open(format!("{}/pp_power_profile_mode", config.home_path))
+        .open(config.home_path.join("pp_power_profile_mode"))
         .expect("Can't access pp_od_clk_voltage file");
     file.write_all("0".as_bytes()) // 0 is BOOTUP_DEFAULT
         .expect("Failed to reset power profile to BOOTUP_DEFAULT");
 
     // Reset pp_od_clk_voltage
     let mut file = OpenOptions::new().write(true)
-        .open(format!("{}/pp_od_clk_voltage", config.home_path))
+        .open(config.home_path.join("pp_od_clk_voltage"))
         .expect("Can't access pp_od_clk_voltage file");
     file.write_all("r".as_bytes())
         .expect("Failed to reset card with pp_od_clk_voltage_file");
@@ -342,23 +376,34 @@ fn read_card_settings(path: &str) {
         .lines()
         .map(|l| l.expect("Can't parse line"))
         .collect();
-    let card: &str = &lines[0];
-    let card_num: u8 = (&card[6..]).parse().expect("Invalid card mount point: Check /sys/class/drm/card#");
-
-    let mut config = DeviceConfig{card: card_num, ..Default::default()};
+    let id_str: &str = &lines[0];
+    let (id_type, id) = id_str.split_once(char::is_whitespace)
+        .expect("Error parsing CARD/UNIQUE_ID");
+    let mut config = DeviceConfig::default();
+    match id_type {
+        "CARD:" => config.card = Some(id.trim().parse().expect("Invalid CARD #")),
+        "UNIQUE_ID:" => config.device_id = Some(u64::from_str_radix(id.trim(), 16).expect("Invalid UNIQUE_ID #")),
+        _ => panic!("Unknown target device: Check /sys/class/drm"),
+    }
     validate_detect_mount_points(&mut config);
 
-    println!("---------- Card {} Settings ----------", config.card);
+    if config.card.is_some() {
+        println!("---------- Card {} Settings ----------", config.card.unwrap());
+    } else if config.device_id.is_some() {
+        // TODO: Use pci-ids to get device name (Need to wait for pci-ids for subvendor entries)
+        println!("---------- Device {:x} Settings ----------", config.device_id.unwrap());
+    }
+
     // let home_path = format!("/sys/class/drm/card{}/device", card_num);
     // PERFORMANCE_LEVEL
-    let file = File::open(format!("{}/power_dpm_force_performance_level", config.home_path))
+    let file = File::open(config.home_path.join("power_dpm_force_performance_level"))
         .expect("Can't access power_dpm_force_performance_level");
     for line in BufReader::new(file).lines().map_while(Result::ok) {
         println!("PERFORMANCE_LEVEL: {}\n", line);
     }
 
     // POWER_PROFILE
-    let file = File::open(format!("{}/pp_power_profile_mode", config.home_path))
+    let file = File::open(config.home_path.join("pp_power_profile_mode"))
         .expect("Can't access pp_power_profile_mode");
     println!("POWER_PROFILE_INDEX");
     for line in BufReader::new(file).lines().map_while(Result::ok) {
@@ -368,33 +413,34 @@ fn read_card_settings(path: &str) {
     }
 
     // POWER_CAP
-    let file = File::open(format!("{}/power1_cap", config.hwmon_path))
+    let file = File::open(config.hwmon_path.join("power1_cap"))
         .expect("Can't access power1_cap file");
     for line in BufReader::new(file).lines().map_while(Result::ok) {
         println!("POWER_CAP:\n{} ({} W)", line, line.parse::<f32>().unwrap() / 1e6);
     }
     println!();
     // PP_OD_CLK_VOLTAGE
-    let file = File::open(format!("{}/pp_od_clk_voltage", config.home_path))
+    let file = File::open(config.home_path.join("pp_od_clk_voltage"))
         .expect("Can't access pp_od_clk_voltage file");
     for line in BufReader::new(file).lines().map_while(Result::ok) {
         println!("{}", line);
     }
     // FAN SETTINGS
-    let fan_dir = format!("{}/gpu_od/fan_ctrl", config.home_path);
-    let fan_target_temp_file = File::open(format!("{}/fan_target_temperature", fan_dir))
+    let fan_dir = config.home_path.join("gpu_od/fan_ctrl");
+    let fan_target_temp_file = File::open(fan_dir.join("fan_target_temperature"))
         .expect("Can't access fan_target_temperature file");
     for line in BufReader::new(fan_target_temp_file).lines().map_while(Result::ok) {
         println!("{}", line);
     }
-    let fan_zero_rpm_file_result = File::open(format!("{}/fan_zero_rpm_enable", fan_dir));
+    let fan_zero_rpm_file_result = File::open(fan_dir.join("fan_zero_rpm_enable"));
     if let Ok(fan_zero_rpm_file) = fan_zero_rpm_file_result {
         println!();
         for line in BufReader::new(fan_zero_rpm_file).lines().map_while(Result::ok) {
             println!("{}", line);
         }
     }
-    let fan_zero_rpm_stop_temp_file_result = File::open(format!("{}/fan_zero_rpm_stop_temperature", fan_dir));
+    let fan_zero_rpm_stop_temp_file_result = File::open(
+        fan_dir.join("fan_zero_rpm_stop_temperature"));
     if let Ok(fan_zero_rpm_stop_temp_file) = fan_zero_rpm_stop_temp_file_result {
         println!();
         for line in BufReader::new(fan_zero_rpm_stop_temp_file).lines().map_while(Result::ok) {
