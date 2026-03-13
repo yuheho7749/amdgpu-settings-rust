@@ -394,7 +394,6 @@ fn read_card_settings(path: &str) {
         println!("---------- Device {:x} Settings ----------", config.device_id.unwrap());
     }
 
-    // let home_path = format!("/sys/class/drm/card{}/device", card_num);
     // PERFORMANCE_LEVEL
     let file = File::open(config.home_path.join("power_dpm_force_performance_level"))
         .expect("Can't access power_dpm_force_performance_level");
@@ -419,12 +418,15 @@ fn read_card_settings(path: &str) {
         println!("POWER_CAP:\n{} ({} W)", line, line.parse::<f32>().unwrap() / 1e6);
     }
     println!();
+
     // PP_OD_CLK_VOLTAGE
     let file = File::open(config.home_path.join("pp_od_clk_voltage"))
         .expect("Can't access pp_od_clk_voltage file");
     for line in BufReader::new(file).lines().map_while(Result::ok) {
         println!("{}", line);
     }
+    println!();
+
     // FAN SETTINGS
     let fan_dir = config.home_path.join("gpu_od/fan_ctrl");
     let fan_target_temp_file = File::open(fan_dir.join("fan_target_temperature"))
