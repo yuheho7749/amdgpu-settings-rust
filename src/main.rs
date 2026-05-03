@@ -30,6 +30,8 @@ struct DeviceConfig {
     od_mclk_max: Option<u32>,
     od_vddgfx_offset: Option<i32>,
     power_cap: Option<u64>,
+    acoustic_limit_rpm_threshold: Option<u32>,
+    acoustic_target_rpm_threshold: Option<u32>,
     fan_target_temp: Option<u32>,
     fan_zero_rpm: Option<u8>,
     fan_zero_rpm_stop_temp: Option<u32>,
@@ -144,6 +146,16 @@ fn parse_power_cap(config: &mut DeviceConfig, lines: &[String]) {
     config.power_cap = Some(value);
 }
 
+fn parse_acoustic_limit_rpm_threshold(config: &mut DeviceConfig, lines: &[String]) {
+    let value = lines[1].parse().expect("Invalid OD_ACOUSTIC_LIMIT");
+    config.acoustic_limit_rpm_threshold = Some(value);
+}
+
+fn parse_acoustic_target_rpm_threshold(config: &mut DeviceConfig, lines: &[String]) {
+    let value = lines[1].parse().expect("Invalid OD_ACOUSTIC_TARGET");
+    config.acoustic_target_rpm_threshold = Some(value);
+}
+
 fn parse_fan_target_temp(config: &mut DeviceConfig, lines: &[String]) {
     let value = lines[1].parse().expect("Invalid FAN_TARGET_TEMPERATURE");
     config.fan_target_temp = Some(value);
@@ -187,6 +199,8 @@ fn parse_profile(path: &str) -> DeviceConfig {
             "OD_MCLK:" => parse_od_mclk(&mut config, &lines[i..]),
             "OD_VDDGFX_OFFSET:" => parse_od_vddgfx_offset(&mut config, &lines[i..]),
             "POWER_CAP:" => parse_power_cap(&mut config, &lines[i..]),
+            "OD_ACOUSTIC_LIMIT:" => parse_acoustic_limit_rpm_threshold(&mut config, &lines[i..]),
+            "OD_ACOUSTIC_TARGET:" => parse_acoustic_target_rpm_threshold(&mut config, &lines[i..]),
             "FAN_TARGET_TEMPERATURE:" => parse_fan_target_temp(&mut config, &lines[i..]),
             "FAN_ZERO_RPM_ENABLE:" => parse_fan_zero_rpm(&mut config, &lines[i..]),
             "FAN_ZERO_RPM_STOP_TEMPERATURE:" => parse_fan_zero_rpm_stop_temp(&mut config, &lines[i..]),
@@ -231,6 +245,23 @@ fn apply_settings(name: &str, mut config: DeviceConfig) {
             .expect("Can't access pp_power_profile_mode file");
         file.write_all(config.power_profile_index.unwrap().to_string().as_bytes())
             .expect("Failed to set POWER_PROFILE_INDEX");
+    }
+
+    // OD_ACOUSTIC_LIMIT
+    if config.acoustic_limit_rpm_threshold.is_some() {
+        let mut file = OpenOptions::new().write(true)
+            .open(config.home_path.join("gpu_od/fan_ctrl/acoustic_limit_rpm_threshold"))
+            .expect("Can't access acoustic_limit_rpm_threshold file");
+        file.write_all(format!("{}\n", config.acoustic_limit_rpm_threshold.unwrap()).as_bytes())
+            .expect("Failed to write OD_ACOUSTIC_LIMIT");
+    }
+    // OD_ACOUSTIC_TARGET
+    if config.acoustic_target_rpm_threshold.is_some() {
+        let mut file = OpenOptions::new().write(true)
+            .open(config.home_path.join("gpu_od/fan_ctrl/acoustic_target_rpm_threshold"))
+            .expect("Can't access acoustic_target_rpm_threshold file");
+        file.write_all(format!("{}\n", config.acoustic_target_rpm_threshold.unwrap()).as_bytes())
+            .expect("Failed to write OD_ACOUSTIC_TARGET");
     }
 
     // FAN_TARGET_TEMPERATURE 
@@ -429,23 +460,37 @@ fn read_card_settings(path: &str) {
 
     // FAN SETTINGS
     let fan_dir = config.home_path.join("gpu_od/fan_ctrl");
-    let fan_target_temp_file = File::open(fan_dir.join("fan_target_temperature"))
-        .expect("Can't access fan_target_temperature file");
-    for line in BufReader::new(fan_target_temp_file).lines().map_while(Result::ok) {
-        println!("{}", line);
-    }
-    let fan_zero_rpm_file_result = File::open(fan_dir.join("fan_zero_rpm_enable"));
-    if let Ok(fan_zero_rpm_file) = fan_zero_rpm_file_result {
-        println!();
-        for line in BufReader::new(fan_zero_rpm_file).lines().map_while(Result::ok) {
+    let acoustic_limit_rpm_file = File::open(fan_dir.join("acoustic_limit_rpm_threshold"));
+    if let Ok(acoustic_limit_rpm_content) = acoustic_limit_rpm_file {
+        for line in BufReader::new(acoustic_limit_rpm_content).lines().map_while(Result::ok) {
             println!("{}", line);
         }
     }
-    let fan_zero_rpm_stop_temp_file_result = File::open(
-        fan_dir.join("fan_zero_rpm_stop_temperature"));
-    if let Ok(fan_zero_rpm_stop_temp_file) = fan_zero_rpm_stop_temp_file_result {
+    let acoustic_target_rpm_file = File::open(fan_dir.join("acoustic_target_rpm_threshold"));
+    if let Ok(acoustic_target_rpm_content) = acoustic_target_rpm_file {
         println!();
-        for line in BufReader::new(fan_zero_rpm_stop_temp_file).lines().map_while(Result::ok) {
+        for line in BufReader::new(acoustic_target_rpm_content).lines().map_while(Result::ok) {
+            println!("{}", line);
+        }
+    }
+    let fan_target_temp_file = File::open(fan_dir.join("fan_target_temperature"));
+    if let Ok(fan_target_temp_content) = fan_target_temp_file {
+        println!();
+        for line in BufReader::new(fan_target_temp_content).lines().map_while(Result::ok) {
+            println!("{}", line);
+        }
+    }
+    let fan_zero_rpm_file = File::open(fan_dir.join("fan_zero_rpm_enable"));
+    if let Ok(fan_zero_rpm_content) = fan_zero_rpm_file {
+        println!();
+        for line in BufReader::new(fan_zero_rpm_content).lines().map_while(Result::ok) {
+            println!("{}", line);
+        }
+    }
+    let fan_zero_rpm_stop_temp_file = File::open(fan_dir.join("fan_zero_rpm_stop_temperature"));
+    if let Ok(fan_zero_rpm_stop_temp_content) = fan_zero_rpm_stop_temp_file {
+        println!();
+        for line in BufReader::new(fan_zero_rpm_stop_temp_content).lines().map_while(Result::ok) {
             println!("{}", line);
         }
     }
