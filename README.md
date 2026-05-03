@@ -52,8 +52,8 @@ The currently supported options are:
 - `OD_MCLK` (the '0: [value]Mhz' means min frequency and '1: [value]Mhz' means max frequency)
 - `OD_VDDGFX_OFFSET` GPU core voltage offset
 - `POWER_CAP`
-- `OD_ACOUSTIC_LIMIT` Max fan rpm at OD_ACOUSTIC_TARGET temperature
-- `OD_ACOUSTIC_TARGET` Target fan rpm at the given core junction temperature
+- `OD_ACOUSTIC_LIMIT` Max fan rpm (in auto fan curve mode)
+- `OD_ACOUSTIC_TARGET` Target fan rpm at the given core junction temperature, aka FAN_TARGET_TEMPERATURE (in auto fan curve mode)
 - `FAN_TARGET_TEMPERATURE`
 - `FAN_ZERO_RPM_ENABLE` (Only available on Linux 6.13 or newer)
 - `FAN_ZERO_RPM_STOP_TEMPERATURE` (Only available on Linux 6.13 or newer; RDNA4 also seems to be missing this option)
