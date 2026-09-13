@@ -2,8 +2,12 @@
 name = "amdgpu-settings"
 version = "0.3.2"
 license = "GPL-2.0"
-edition = "2021"
+edition = "2024"
 
 [dependencies]
-clap = { version = "4.5.29", features = ["derive"] }
-glob = "0.3.2"
+clap = { version = "4", features = ["derive"] }
+glob = "0.3"
+
+[profile.release]
+lto = true
+strip = true
